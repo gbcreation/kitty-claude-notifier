@@ -5,7 +5,18 @@ use crate::state::State;
 /// hook's command line, made explicit and testable here instead.
 ///
 /// Returns `None` for events we don't turn into a tab state (e.g.
-/// `session-end`, which the caller handles as a cleanup instead).
+/// `session-end`, which the caller handles as a cleanup instead;
+/// `post-tool-use-failure`, deliberately not registered at all — see below).
+///
+/// `post-tool-use-failure` (a single tool call failing) is intentionally
+/// *not* mapped to `Error`: Claude routinely recovers from a failed tool
+/// call within the same turn without any input from the user, so flagging
+/// every one as an error state was mostly noise, not signal — and, worse,
+/// the state had no automatic exit (see `daemon::idle_timer`), so a tab
+/// could get stuck showing "error" long after Claude had already moved on.
+/// `stop-failure` (the whole turn ending in failure) is kept — nothing
+/// "tries something else" after that, so it's a real, terminal signal
+/// worth surfacing.
 pub fn resolve_state(event: &str, matcher: Option<&str>) -> Option<State> {
     match event {
         "user-prompt-submit" => Some(State::Working),
@@ -16,7 +27,7 @@ pub fn resolve_state(event: &str, matcher: Option<&str>) -> Option<State> {
             _ => None,
         },
         "stop" => Some(State::Done),
-        "stop-failure" | "post-tool-use-failure" => Some(State::Error),
+        "stop-failure" => Some(State::Error),
         _ => None,
     }
 }
@@ -33,10 +44,13 @@ mod tests {
         );
         assert_eq!(resolve_state("stop", None), Some(State::Done));
         assert_eq!(resolve_state("stop-failure", None), Some(State::Error));
-        assert_eq!(
-            resolve_state("post-tool-use-failure", None),
-            Some(State::Error)
-        );
+    }
+
+    #[test]
+    fn post_tool_use_failure_is_deliberately_not_mapped() {
+        // A single tool failing is not surfaced as `Error` — Claude
+        // routinely recovers within the same turn without user input.
+        assert_eq!(resolve_state("post-tool-use-failure", None), None);
     }
 
     #[test]

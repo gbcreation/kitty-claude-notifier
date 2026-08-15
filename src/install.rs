@@ -68,12 +68,6 @@ const HOOKS: &[HookSpec] = &[
         our_matcher: None,
     },
     HookSpec {
-        event_key: "PostToolUseFailure",
-        matcher: Some(".*"),
-        our_event: "post-tool-use-failure",
-        our_matcher: None,
-    },
-    HookSpec {
         event_key: "SessionEnd",
         matcher: None,
         our_event: "session-end",
