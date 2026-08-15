@@ -3,10 +3,14 @@ use std::time::Duration;
 
 use clap::Parser;
 use kitty_claude_notifier::cli::{Cli, Commands};
+use kitty_claude_notifier::config::Config;
 use kitty_claude_notifier::kitty::{KittyClient, ProcessKittyClient, WindowTarget};
+use kitty_claude_notifier::paths;
+use kitty_claude_notifier::state::State;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let config = Config::load(&paths::config_path())?;
 
     match cli.command {
         Commands::Hook {
@@ -15,7 +19,7 @@ fn main() -> anyhow::Result<()> {
             stdin,
         } => {
             let client = ProcessKittyClient::new();
-            kitty_claude_notifier::hook::run(&event, matcher.as_deref(), stdin, &client)?;
+            kitty_claude_notifier::hook::run(&event, matcher.as_deref(), stdin, &client, &config)?;
         }
         Commands::Daemon => {
             println!("daemon: not yet implemented");
@@ -26,17 +30,17 @@ fn main() -> anyhow::Result<()> {
         Commands::Uninstall => {
             println!("uninstall: not yet implemented");
         }
-        Commands::Test => run_test()?,
+        Commands::Test => run_test(&config)?,
     }
     Ok(())
 }
 
-fn run_test() -> anyhow::Result<()> {
+fn run_test(config: &Config) -> anyhow::Result<()> {
     let client = ProcessKittyClient::new();
     let target = WindowTarget::from_env();
     println!("kitty-claude-notifier: sending test blink (target: {target:?})...");
-    client.set_tab_title(&target, "⛔ Perm")?;
-    client.set_tab_color(&target, "#ff003c")?;
+    client.set_tab_title(&target, &config.title_for(State::Permission))?;
+    client.set_tab_color(&target, &config.color_for(State::Permission))?;
     sleep(Duration::from_millis(800));
     client.set_tab_title(&target, "")?;
     client.set_tab_color(&target, "NONE")?;

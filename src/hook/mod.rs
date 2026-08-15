@@ -8,6 +8,7 @@ use std::io::{self, Read};
 
 use anyhow::Result;
 
+use crate::config::Config;
 use crate::kitty::{KittyClient, WindowTarget};
 
 /// Handles `hook --event <name> [--matcher <m>] [--stdin]`. For now (no
@@ -19,6 +20,7 @@ pub fn run(
     matcher: Option<&str>,
     read_stdin: bool,
     client: &dyn KittyClient,
+    config: &Config,
 ) -> Result<()> {
     let raw = if read_stdin {
         let mut buf = String::new();
@@ -33,8 +35,8 @@ pub fn run(
 
     match resolve_state(event, matcher) {
         Some(state) => {
-            client.set_tab_title(&target, state.default_title())?;
-            client.set_tab_color(&target, state.default_color())?;
+            client.set_tab_title(&target, &config.title_for(state))?;
+            client.set_tab_color(&target, &config.color_for(state))?;
         }
         None if event == "session-end" => {
             client.set_tab_title(&target, "")?;

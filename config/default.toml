@@ -1,0 +1,37 @@
+# kitty-claude-notifier configuration
+# Copied to ~/.config/kitty-claude-notifier/config.toml on install.
+# Any field left out here falls back to the built-in default.
+
+# Seconds before done/waiting -> idle.
+idle_timeout_secs = 300
+
+# How often the resume-detection screen-scrape polls `kitten @ get-text`
+# while a session is stuck in permission/waiting (milliseconds).
+resume_poll_interval_ms = 500
+
+# Per-state tab title overrides. Omit a key to keep the built-in default.
+[titles]
+working = "⚡ Work"
+permission = "⛔ Perm"
+waiting = "⏳ Wait"
+done = "✅ Done"
+idle = "💤 Idle"
+error = "❌ Error"
+
+# Per-state tab color overrides (`active_bg` value passed to
+# `kitten @ set-tab-color`). Use "NONE" to clear the tab color.
+[colors]
+working = "#b026ff"
+permission = "#ff003c"
+waiting = "#00ffd5"
+done = "#00ffd5"
+idle = "NONE"
+error = "#ff6b00"
+
+# Text markers (case-insensitive substring match) that indicate a
+# permission prompt is still visible on screen. Update this list if
+# Claude Code's prompt wording changes across versions.
+permission_markers = [
+    "do you want to proceed?",
+    "❯ 1. yes",
+]
