@@ -1,28 +1,50 @@
 # kitty-claude-notifier
 
-Reactive Kitty terminal tab indicators for Claude Code.
+[![CI](https://github.com/gbcreation/kitty-claude-notifier/actions/workflows/ci.yml/badge.svg)](https://github.com/gbcreation/kitty-claude-notifier/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Why this exists
+**Reactive Kitty terminal tab indicators for [Claude Code](https://github.com/anthropics/claude-code).**
+See at a glance, across every tab, which of your Claude Code sessions
+need your attention — no more tabbing through every window to check.
 
-Claude Code fires hook events for most session-state transitions (working,
-permission needed, waiting on you, done, error), but it has **no event for
-"a permission prompt was just resolved."** A hook-only design leaves a tab
-stuck showing "permission needed" until the next unrelated hook happens to
-fire and reset it — which could be a long time.
+> Vibe-coded: this project was built through conversational
+> pair-programming with [Claude Code](https://claude.com/claude-code).
 
-This tool closes that gap directly: while a session sits in
-`permission`/`waiting`, a background daemon polls the tab's actual
-rendered screen content (`kitten @ get-text`) and watches for the prompt
-text to disappear. The moment it does, the tab flips back to `working` —
-typically within one poll interval (500ms by default), not whenever the
-next hook happens to arrive. Every other state transition still comes
-straight from Claude Code's hooks, which are already fast and precise;
-this only replaces the one mechanism that couldn't be hook-driven.
+## Features
 
-Rather than overwriting a tab's title outright, it **prepends a small
-colored icon** onto whatever the title already is — so your shell's own
-title (current directory, running command, etc.) stays visible, with just
-a glyph in front of it signaling state.
+- **Live tab state** — a small colored icon prepended onto each tab's
+  existing title shows whether that session is working, needs a
+  permission decision, is waiting on you, just finished, or hit an
+  error — without ever clobbering your shell's own title.
+- **Reactive permission detection** — Claude Code has no hook event for
+  "a permission prompt was just resolved," so most tools get stuck
+  showing "needs permission" long after you've already answered it. This
+  one reads the tab's actual rendered screen content and flips back the
+  moment the prompt disappears, typically within 500ms.
+- **Optional sound notifications** — an audible cue when a session needs
+  your input or just finished, automatically suppressed for whichever
+  tab you're currently looking at.
+- **Per-state colors and icons** — fully configurable, including
+  separate colors for a tab's focused vs. unfocused background.
+- **No extra runtime dependencies** — a single static binary plus
+  whatever's already on your system (Kitty, optionally a system audio
+  player). Config changes apply live, no restart needed.
+- **Privacy-conscious** — never logs or retains anything beyond a tab's
+  title and focus state, even though the underlying Kitty IPC call
+  exposes far more.
+
+## Requirements
+
+- [Kitty](https://sw.kovidgoyal.net/kitty/) terminal, with
+  `allow_remote_control yes` and a `listen_on` socket configured in
+  `kitty.conf` (e.g. `listen_on unix:/tmp/kitty-{kitty_pid}`) — without
+  this, `kitten @` can't reach Kitty from a hook subprocess, which has
+  no controlling TTY.
+- [Claude Code](https://github.com/anthropics/claude-code).
+- Rust toolchain to build (no prebuilt binaries yet).
+- *Optional:* a system audio player for sound notifications —
+  `afplay` (macOS, built in) or `paplay`/`pw-play`/`ffplay`/`mpg123`/`mpv`
+  (Linux, tried in that order).
 
 ## Install
 
@@ -31,25 +53,18 @@ cargo build --release
 ./target/release/kitty-claude-notifier install
 ```
 
-`install` copies the binary to `~/.config/kitty-claude-notifier/bin/`,
-writes a default config if none exists, and appends its own hook entries
-into `~/.claude/settings.json` — it never touches or removes any other
+This copies the binary to `~/.config/kitty-claude-notifier/bin/`, writes
+a default config if none exists, and appends its own hook entries into
+`~/.claude/settings.json` — it never touches or removes any other
 entries already in that file (verified: installing then uninstalling
 round-trips the settings file byte-for-byte).
 
-Requires Kitty with `allow_remote_control yes` and a `listen_on` socket
-configured (e.g. `listen_on unix:/tmp/kitty-{kitty_pid}`) — without a
-listen socket, `kitten @` can only reach Kitty from a process with a
-controlling TTY, which hook subprocesses don't have.
-
-## Uninstall
+To uninstall (removes only this tool's hook entries and copied binary;
+your `config.toml` is left in place):
 
 ```bash
 kitty-claude-notifier uninstall
 ```
-
-Removes only this tool's hook entries and the copied binary. Your
-`config.toml` is left in place.
 
 ## Configuration
 
@@ -103,6 +118,48 @@ just renders in its default color).
 If Claude Code's prompt wording changes across versions and resume
 detection stops firing, update `permission_markers` — no rebuild needed.
 
+## Sound notifications
+
+Off by default. When `sound_enabled = true`, a sound plays on entering
+`permission`/`waiting` (needs your input) and on `done` (a turn
+finished) — nothing plays for repeated/no-op transitions into the same
+state, and nothing plays if the tab is currently focused (you're already
+looking at it) unless `sound_play_when_focused = true`. Playback runs in
+a background thread and never blocks or fails the state update itself.
+
+The two built-in sounds are sourced from
+[herdrdev/herdr](https://github.com/herdrdev/herdr) (Apache License
+2.0) — see [`assets/sounds/NOTICE.md`](assets/sounds/NOTICE.md) for
+attribution. Override either with `[sounds] request = "..."` /
+`done = "..."` in `config.toml`; a custom path that fails to play falls
+back to the built-in default.
+
+Requires a system audio player on `PATH`. Silently does nothing if none
+are found — check `~/.config/kitty-claude-notifier/daemon.log` for a
+`sound playback failed` warning if you enable it and hear nothing.
+
+## Why this exists
+
+Claude Code fires hook events for most session-state transitions (working,
+permission needed, waiting on you, done, error), but it has no event for
+"a permission prompt was just resolved." A hook-only design leaves a tab
+stuck showing "permission needed" until the next unrelated hook happens to
+fire and reset it — which could be a long time.
+
+This tool closes that gap directly: while a session sits in
+`permission`/`waiting`, a background daemon polls the tab's actual
+rendered screen content (`kitten @ get-text`) and watches for the prompt
+text to disappear. The moment it does, the tab flips back to `working` —
+typically within one poll interval (500ms by default), not whenever the
+next hook happens to arrive. Every other state transition still comes
+straight from Claude Code's hooks, which are already fast and precise;
+this only replaces the one mechanism that couldn't be hook-driven.
+
+Rather than overwriting a tab's title outright, it prepends a small
+colored icon onto whatever the title already is — so your shell's own
+title (current directory, running command, etc.) stays visible, with just
+a glyph in front of it signaling state.
+
 ## How it works
 
 ```
@@ -133,28 +190,6 @@ daemon (long-running, tokio)
     thread, via whichever system audio player happens to be installed
 ```
 
-## Sound notifications
-
-Off by default. When `sound_enabled = true`, a sound plays on entering
-`permission`/`waiting` (needs your input) and on `done` (a turn
-finished) — nothing plays for repeated/no-op transitions into the same
-state, and nothing plays if the tab is currently focused (you're already
-looking at it) unless `sound_play_when_focused = true`. Playback runs in
-a background thread and never blocks or fails the state update itself.
-
-The two built-in sounds are sourced from
-[herdrdev/herdr](https://github.com/herdrdev/herdr) (Apache License
-2.0) — see [`assets/sounds/NOTICE.md`](assets/sounds/NOTICE.md) for
-attribution. Override either with `[sounds] request = "..."` /
-`done = "..."` in `config.toml`; a custom path that fails to play falls
-back to the built-in default.
-
-Requires a system audio player on `PATH`: `afplay` on macOS;
-`paplay`/`pw-play`/`ffplay`/`mpg123`/`mpv` (tried in that order) on
-Linux. Silently does nothing if none are found — check
-`~/.config/kitty-claude-notifier/daemon.log` for a `sound playback
-failed` warning if you enable it and hear nothing.
-
 A real OS advisory lock (`fd-lock`) gates daemon startup, so two
 concurrently-spawned daemon processes can't race to bind the socket —
 one binds, the other logs that it lost the race and exits.
@@ -166,14 +201,38 @@ other process details alongside its title. This tool only ever extracts
 the `title`/`is_focused` fields from that response and never logs or
 retains the rest.
 
-## Development
+## Acknowledgements
+
+- [**claude-notifier**](https://github.com/omendivil/claude-notifier) —
+  the bash predecessor to this project, giving the same visual
+  tab-state idea for Claude Code + Kitty. This project is a from-scratch
+  Rust rewrite, built specifically to close the "stuck permission tab"
+  gap that its hook-and-poll approach couldn't fully solve.
+- [**herdr**](https://github.com/herdrdev/herdr) — a Claude Code runtime
+  whose approach of reading the terminal's actual rendered screen text
+  (rather than relying solely on hooks) to detect agent state directly
+  inspired this project's reactive resume-detection design. The
+  built-in notification sounds are also sourced from herdr — see
+  [`assets/sounds/NOTICE.md`](assets/sounds/NOTICE.md).
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a PR:
 
 ```bash
-cargo test              # 52 tests: unit (FakeKittyClient, no real Kitty
-                         # needed) + integration (mock kitten binary, and
-                         # the real compiled daemon against a temp socket)
+cargo test --all-targets
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-CI (`.github/workflows/ci.yml`) runs all three on every push/PR.
+CI (`.github/workflows/ci.yml`) runs all three on every push/PR — see
+[`CLAUDE.md`](CLAUDE.md) for the full architecture and conventions this
+project follows.
+
+## License
+
+Licensed under the [MIT license](LICENSE). The bundled notification
+sounds (`assets/sounds/*.mp3`) are sourced from
+[herdrdev/herdr](https://github.com/herdrdev/herdr) and remain under the
+[Apache License 2.0](assets/sounds/LICENSE-APACHE-herdr) — see
+[`assets/sounds/NOTICE.md`](assets/sounds/NOTICE.md) for attribution.

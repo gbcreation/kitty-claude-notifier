@@ -2,6 +2,9 @@
 name = "kitty-claude-notifier"
 version = "0.2.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/gbcreation/kitty-claude-notifier"
+description = "Reactive Kitty terminal tab indicators for Claude Code"
 
 [dependencies]
 anyhow = "1.0.104"
