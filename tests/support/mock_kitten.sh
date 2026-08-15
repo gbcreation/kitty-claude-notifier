@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Mock `kitten` binary for integration tests — logs every invocation and,
-# for `get-text`, echoes back $MOCK_KITTEN_GET_TEXT so tests can script
-# scrapeable screen content without a real Kitty instance.
+# Mock `kitten` binary for integration tests — logs every invocation and
+# scripts responses for the two commands that read something back:
+# - `get-text`: echoes $MOCK_KITTEN_GET_TEXT
+# - `ls`: returns minimal valid JSON with $MOCK_KITTEN_LS_TITLE as the
+#   tab's title (defaults to empty), matching the shape get_tab_title parses
 echo "kitten $*" >> "${MOCK_KITTEN_LOG}"
 if [[ "$1" == "@" && "$2" == "get-text" ]]; then
   printf '%s' "${MOCK_KITTEN_GET_TEXT:-}"
+elif [[ "$1" == "@" && "$2" == "ls" ]]; then
+  printf '[{"tabs":[{"title":"%s"}]}]' "${MOCK_KITTEN_LS_TITLE:-}"
 fi

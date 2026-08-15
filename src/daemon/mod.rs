@@ -5,22 +5,25 @@ mod session;
 mod transitions;
 
 use std::fs::{self, OpenOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tokio::net::UnixListener;
 
-use crate::config::Config;
 use crate::kitty::{KittyClient, ProcessKittyClient};
 use crate::paths;
 
 /// Entry point for the `daemon` subcommand — builds a small tokio runtime
 /// just for this (other subcommands stay synchronous) and runs forever.
-pub fn run(socket_path: &Path, config: Config) -> Result<()> {
+/// Takes `config_path` rather than a pre-loaded `Config`: the config is
+/// reloaded fresh from disk for every message (see `server::run`), so an
+/// edit to config.toml takes effect on the next hook event without
+/// needing to restart the daemon.
+pub fn run(socket_path: &Path, config_path: PathBuf) -> Result<()> {
     init_logging()?;
     let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(async_run(socket_path, config))
+    runtime.block_on(async_run(socket_path, config_path))
 }
 
 fn init_logging() -> Result<()> {
@@ -40,7 +43,7 @@ fn init_logging() -> Result<()> {
     Ok(())
 }
 
-async fn async_run(socket_path: &Path, config: Config) -> Result<()> {
+async fn async_run(socket_path: &Path, config_path: PathBuf) -> Result<()> {
     // Held for the rest of this function's lifetime (the daemon's entire
     // run), and released automatically by the kernel if this process dies
     // for any reason — no stale-PID/lock-age guessing needed.
@@ -78,5 +81,5 @@ async fn async_run(socket_path: &Path, config: Config) -> Result<()> {
     tracing::info!("daemon listening on {}", socket_path.display());
 
     let client: Arc<dyn KittyClient + Send + Sync> = Arc::new(ProcessKittyClient::new());
-    server::run(listener, client, Arc::new(config)).await
+    server::run(listener, client, config_path).await
 }

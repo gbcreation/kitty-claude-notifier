@@ -25,8 +25,7 @@ fn main() -> anyhow::Result<()> {
             )?;
         }
         Commands::Daemon => {
-            let config = Config::load(&paths::config_path())?;
-            kitty_claude_notifier::daemon::run(&paths::daemon_socket_path(), config)?;
+            kitty_claude_notifier::daemon::run(&paths::daemon_socket_path(), paths::config_path())?;
         }
         Commands::Install => kitty_claude_notifier::install::install()?,
         Commands::Uninstall => kitty_claude_notifier::install::uninstall()?,
