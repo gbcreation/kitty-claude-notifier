@@ -1,9 +1,12 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 /// Mirrors claude-notifier's locked state model, minus `researching`/`normal`
 /// (neither has a hook trigger, so lean v1 doesn't need them).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum State {
     Working,
     Permission,

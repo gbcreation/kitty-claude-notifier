@@ -10,7 +10,6 @@ use kitty_claude_notifier::state::State;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let config = Config::load(&paths::config_path())?;
 
     match cli.command {
         Commands::Hook {
@@ -18,11 +17,16 @@ fn main() -> anyhow::Result<()> {
             matcher,
             stdin,
         } => {
-            let client = ProcessKittyClient::new();
-            kitty_claude_notifier::hook::run(&event, matcher.as_deref(), stdin, &client, &config)?;
+            kitty_claude_notifier::hook::run(
+                &event,
+                matcher.as_deref(),
+                stdin,
+                &paths::daemon_socket_path(),
+            )?;
         }
         Commands::Daemon => {
-            println!("daemon: not yet implemented");
+            let config = Config::load(&paths::config_path())?;
+            kitty_claude_notifier::daemon::run(&paths::daemon_socket_path(), config)?;
         }
         Commands::Install => {
             println!("install: not yet implemented");
@@ -30,7 +34,10 @@ fn main() -> anyhow::Result<()> {
         Commands::Uninstall => {
             println!("uninstall: not yet implemented");
         }
-        Commands::Test => run_test(&config)?,
+        Commands::Test => {
+            let config = Config::load(&paths::config_path())?;
+            run_test(&config)?;
+        }
     }
     Ok(())
 }

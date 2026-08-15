@@ -1,8 +1,14 @@
 use std::env;
 
+use serde::{Deserialize, Serialize};
+
 /// Which Kitty window/tab a command should target — mirrors the bash tool's
 /// `--self`-when-available, `--match pid:$PPID`-otherwise fallback.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Resolved on the hook side (where KITTY_WINDOW_ID/PPID are meaningful) and
+/// carried as-is over IPC to the daemon, whose own process tree has no
+/// relationship to the terminal that fired the hook.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WindowTarget {
     Id(String),
     Pid(u32),
