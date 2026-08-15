@@ -28,12 +28,8 @@ fn main() -> anyhow::Result<()> {
             let config = Config::load(&paths::config_path())?;
             kitty_claude_notifier::daemon::run(&paths::daemon_socket_path(), config)?;
         }
-        Commands::Install => {
-            println!("install: not yet implemented");
-        }
-        Commands::Uninstall => {
-            println!("uninstall: not yet implemented");
-        }
+        Commands::Install => kitty_claude_notifier::install::install()?,
+        Commands::Uninstall => kitty_claude_notifier::install::uninstall()?,
         Commands::Test => {
             let config = Config::load(&paths::config_path())?;
             run_test(&config)?;

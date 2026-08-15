@@ -9,6 +9,12 @@ pub fn config_path() -> PathBuf {
     config_dir().join("config.toml")
 }
 
+/// Where `install` copies the binary to, so registered hook commands keep
+/// working even if the build directory (e.g. `target/debug/`) is cleaned.
+pub fn installed_binary_path() -> PathBuf {
+    config_dir().join("bin").join("kitty-claude-notifier")
+}
+
 pub fn daemon_socket_path() -> PathBuf {
     config_dir().join("daemon.sock")
 }
