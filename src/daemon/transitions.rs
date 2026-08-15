@@ -9,6 +9,7 @@ use crate::kitty::KittyClient;
 use crate::state::State;
 
 use super::idle_timer;
+use super::resume_watch;
 use super::session::{Session, SessionTable};
 
 /// Applies one incoming message: updates the tab via `client`, and reflects
@@ -27,18 +28,25 @@ pub async fn apply(
             let _ = client.set_tab_color(&msg.target, &config.color_for(state));
             if let Some(session_id) = msg.session_id {
                 let mut table = sessions.lock().await;
-                // Any prior idle timer belongs to a state this message
-                // supersedes — abort it so it can never fire late.
+                // Any prior timers belong to a state this message
+                // supersedes — abort them so neither can fire late.
                 if let Some(old) = table.remove(&session_id) {
-                    if let Some(handle) = old.idle_timer {
-                        handle.abort();
-                    }
+                    abort_timers(&old);
                 }
                 let idle_timer = matches!(state, State::Done | State::Waiting).then(|| {
                     idle_timer::spawn(
                         session_id.clone(),
                         msg.target.clone(),
                         Duration::from_secs(config.idle_timeout_secs),
+                        sessions.clone(),
+                        client.clone(),
+                        config.clone(),
+                    )
+                });
+                let resume_watch = matches!(state, State::Permission | State::Waiting).then(|| {
+                    resume_watch::spawn(
+                        session_id.clone(),
+                        msg.target.clone(),
                         sessions.clone(),
                         client.clone(),
                         config.clone(),
@@ -51,6 +59,7 @@ pub async fn apply(
                         target: msg.target,
                         transcript_path: msg.transcript_path,
                         idle_timer,
+                        resume_watch,
                     },
                 );
             }
@@ -60,11 +69,18 @@ pub async fn apply(
             let _ = client.set_tab_color(&msg.target, "NONE");
             if let Some(session_id) = msg.session_id {
                 if let Some(old) = sessions.lock().await.remove(&session_id) {
-                    if let Some(handle) = old.idle_timer {
-                        handle.abort();
-                    }
+                    abort_timers(&old);
                 }
             }
         }
+    }
+}
+
+fn abort_timers(session: &Session) {
+    if let Some(handle) = &session.idle_timer {
+        handle.abort();
+    }
+    if let Some(handle) = &session.resume_watch {
+        handle.abort();
     }
 }

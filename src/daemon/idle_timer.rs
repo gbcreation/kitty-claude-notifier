@@ -26,6 +26,12 @@ pub fn spawn(
         tokio::time::sleep(duration).await;
         let mut table = sessions.lock().await;
         if let Some(session) = table.get_mut(&session_id) {
+            // A session in Waiting has both timers armed; idle_timer
+            // winning the race means resume_watch's answer no longer
+            // applies.
+            if let Some(handle) = session.resume_watch.take() {
+                handle.abort();
+            }
             session.state = State::Idle;
             session.idle_timer = None;
             let _ = client.set_tab_title(&target, &config.title_for(State::Idle));

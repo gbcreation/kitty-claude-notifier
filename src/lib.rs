@@ -4,5 +4,6 @@ pub mod daemon;
 pub mod hook;
 pub mod ipc;
 pub mod kitty;
+pub mod markers;
 pub mod paths;
 pub mod state;
