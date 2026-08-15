@@ -42,11 +42,12 @@ fn run_test(config: &Config) -> anyhow::Result<()> {
     let client = ProcessKittyClient::new();
     let target = WindowTarget::from_env();
     println!("kitty-claude-notifier: sending test blink (target: {target:?})...");
+    let (active, inactive) = config.colors_for(State::Permission);
     client.set_tab_title(&target, &config.title_for(State::Permission))?;
-    client.set_tab_color(&target, &config.color_for(State::Permission))?;
+    client.set_tab_color(&target, &active, &inactive)?;
     sleep(Duration::from_millis(800));
     client.set_tab_title(&target, "")?;
-    client.set_tab_color(&target, "NONE")?;
+    client.set_tab_color(&target, "NONE", "NONE")?;
     println!("kitty-claude-notifier: test complete");
     Ok(())
 }

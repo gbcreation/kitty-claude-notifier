@@ -7,7 +7,8 @@ use super::{KittyClient, WindowTarget};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Call {
     SetTabTitle(WindowTarget, String),
-    SetTabColor(WindowTarget, String),
+    /// (target, active_bg, inactive_bg)
+    SetTabColor(WindowTarget, String, String),
     GetText(WindowTarget),
 }
 
@@ -43,6 +44,19 @@ impl FakeKittyClient {
                 _ => None,
             })
     }
+
+    /// Returns the last `(active_bg, inactive_bg)` set, if any.
+    pub fn last_colors(&self) -> Option<(String, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .find_map(|c| match c {
+                Call::SetTabColor(_, active, inactive) => Some((active.clone(), inactive.clone())),
+                _ => None,
+            })
+    }
 }
 
 impl KittyClient for FakeKittyClient {
@@ -54,11 +68,17 @@ impl KittyClient for FakeKittyClient {
         Ok(())
     }
 
-    fn set_tab_color(&self, target: &WindowTarget, active_bg: &str) -> Result<()> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(Call::SetTabColor(target.clone(), active_bg.to_string()));
+    fn set_tab_color(
+        &self,
+        target: &WindowTarget,
+        active_bg: &str,
+        inactive_bg: &str,
+    ) -> Result<()> {
+        self.calls.lock().unwrap().push(Call::SetTabColor(
+            target.clone(),
+            active_bg.to_string(),
+            inactive_bg.to_string(),
+        ));
         Ok(())
     }
 

@@ -49,9 +49,21 @@ impl KittyClient for ProcessKittyClient {
         Ok(())
     }
 
-    fn set_tab_color(&self, target: &WindowTarget, active_bg: &str) -> Result<()> {
-        let spec = format!("active_bg={active_bg}");
-        self.run(&["set-tab-color", "--match", &target.match_expr(), &spec])?;
+    fn set_tab_color(
+        &self,
+        target: &WindowTarget,
+        active_bg: &str,
+        inactive_bg: &str,
+    ) -> Result<()> {
+        let active_spec = format!("active_bg={active_bg}");
+        let inactive_spec = format!("inactive_bg={inactive_bg}");
+        self.run(&[
+            "set-tab-color",
+            "--match",
+            &target.match_expr(),
+            &active_spec,
+            &inactive_spec,
+        ])?;
         Ok(())
     }
 

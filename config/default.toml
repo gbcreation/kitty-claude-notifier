@@ -30,8 +30,16 @@ done = "✅ Done"
 idle = "💤 Idle"
 error = "❌ Error"
 
-# Per-state tab color overrides (`active_bg` value passed to
-# `kitten @ set-tab-color`). Use "NONE" to clear the tab color.
+# Per-state tab color overrides. A plain string applies to both the
+# focused and unfocused tab background ("NONE" clears it). To use a
+# different color when the tab isn't focused, use a table instead, e.g.:
+#
+#   [colors.permission]
+#   active = "#ff003c"
+#   inactive = "#7a0020"
+#
+# (Kitty only honors `active_bg` while a tab is focused, so without an
+# inactive color a background tab wouldn't show any color at all.)
 [colors]
 working = "#b026ff"
 permission = "#ff003c"

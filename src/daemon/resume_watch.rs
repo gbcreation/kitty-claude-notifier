@@ -73,11 +73,13 @@ pub fn spawn(
             }
             drop(table);
             tracing::info!(%session_id, "resume detected — permission/waiting cleared");
+            let (active, inactive) = config.colors_for(State::Working);
             kitty::apply(
                 client.as_ref(),
                 &target,
                 &config.title_for(State::Working),
-                &config.color_for(State::Working),
+                &active,
+                &inactive,
             );
             return;
         }

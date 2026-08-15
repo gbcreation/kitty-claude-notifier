@@ -28,7 +28,8 @@ impl State {
         }
     }
 
-    /// `active_bg` value for `kitten @ set-tab-color`.
+    /// Default `active_bg`/`inactive_bg` value for `kitten @ set-tab-color`
+    /// (the same color is used for both unless overridden in config.toml).
     pub fn default_color(&self) -> &'static str {
         match self {
             State::Working => "#b026ff",

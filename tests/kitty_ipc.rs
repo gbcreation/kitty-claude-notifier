@@ -30,12 +30,12 @@ fn process_kitty_client_invokes_mock_kitten_correctly() {
     let target = WindowTarget::Id("42".to_string());
 
     client.set_tab_title(&target, "⛔ Perm").unwrap();
-    client.set_tab_color(&target, "#ff003c").unwrap();
+    client.set_tab_color(&target, "#ff003c", "#7a0020").unwrap();
     let text = client.get_text(&target).unwrap();
 
     let log = fs::read_to_string(&log_path).unwrap();
     assert!(log.contains("set-tab-title --match id:42 ⛔ Perm"));
-    assert!(log.contains("set-tab-color --match id:42 active_bg=#ff003c"));
+    assert!(log.contains("set-tab-color --match id:42 active_bg=#ff003c inactive_bg=#7a0020"));
     assert!(log.contains("get-text --match id:42"));
     assert!(text.contains("Do you want to proceed?"));
 

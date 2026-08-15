@@ -35,11 +35,13 @@ pub fn spawn(
             session.state = State::Idle;
             session.idle_timer = None;
             tracing::info!(%session_id, "idle timeout reached");
+            let (active, inactive) = config.colors_for(State::Idle);
             kitty::apply(
                 client.as_ref(),
                 &target,
                 &config.title_for(State::Idle),
-                &config.color_for(State::Idle),
+                &active,
+                &inactive,
             );
         }
     })

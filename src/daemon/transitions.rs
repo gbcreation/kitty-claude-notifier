@@ -24,11 +24,13 @@ pub async fn apply(
 ) {
     match msg.kind {
         MessageKind::SetState(state) => {
+            let (active, inactive) = config.colors_for(state);
             kitty::apply(
                 client.as_ref(),
                 &msg.target,
                 &config.title_for(state),
-                &config.color_for(state),
+                &active,
+                &inactive,
             );
             if let Some(session_id) = msg.session_id {
                 let mut table = sessions.lock().await;
@@ -68,7 +70,7 @@ pub async fn apply(
             }
         }
         MessageKind::Cleanup => {
-            kitty::apply(client.as_ref(), &msg.target, "", "NONE");
+            kitty::apply(client.as_ref(), &msg.target, "", "NONE", "NONE");
             if let Some(session_id) = msg.session_id
                 && let Some(old) = sessions.lock().await.remove(&session_id)
             {
