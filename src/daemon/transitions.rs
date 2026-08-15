@@ -1,11 +1,14 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::Mutex;
 
 use crate::config::Config;
 use crate::ipc::protocol::{HookMessage, MessageKind};
 use crate::kitty::KittyClient;
+use crate::state::State;
 
+use super::idle_timer;
 use super::session::{Session, SessionTable};
 
 /// Applies one incoming message: updates the tab via `client`, and reflects
@@ -15,20 +18,39 @@ use super::session::{Session, SessionTable};
 pub async fn apply(
     msg: HookMessage,
     sessions: &Arc<Mutex<SessionTable>>,
-    client: &(dyn KittyClient + Send + Sync),
-    config: &Config,
+    client: &Arc<dyn KittyClient + Send + Sync>,
+    config: &Arc<Config>,
 ) {
     match msg.kind {
         MessageKind::SetState(state) => {
             let _ = client.set_tab_title(&msg.target, &config.title_for(state));
             let _ = client.set_tab_color(&msg.target, &config.color_for(state));
             if let Some(session_id) = msg.session_id {
-                sessions.lock().await.insert(
+                let mut table = sessions.lock().await;
+                // Any prior idle timer belongs to a state this message
+                // supersedes — abort it so it can never fire late.
+                if let Some(old) = table.remove(&session_id) {
+                    if let Some(handle) = old.idle_timer {
+                        handle.abort();
+                    }
+                }
+                let idle_timer = matches!(state, State::Done | State::Waiting).then(|| {
+                    idle_timer::spawn(
+                        session_id.clone(),
+                        msg.target.clone(),
+                        Duration::from_secs(config.idle_timeout_secs),
+                        sessions.clone(),
+                        client.clone(),
+                        config.clone(),
+                    )
+                });
+                table.insert(
                     session_id,
                     Session {
                         state,
                         target: msg.target,
                         transcript_path: msg.transcript_path,
+                        idle_timer,
                     },
                 );
             }
@@ -37,7 +59,11 @@ pub async fn apply(
             let _ = client.set_tab_title(&msg.target, "");
             let _ = client.set_tab_color(&msg.target, "NONE");
             if let Some(session_id) = msg.session_id {
-                sessions.lock().await.remove(&session_id);
+                if let Some(old) = sessions.lock().await.remove(&session_id) {
+                    if let Some(handle) = old.idle_timer {
+                        handle.abort();
+                    }
+                }
             }
         }
     }

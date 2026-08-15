@@ -45,7 +45,7 @@ async fn handle_connection(
             Ok(0) | Err(_) => break,
             Ok(_) => {
                 if let Ok(msg) = serde_json::from_str::<HookMessage>(line.trim_end()) {
-                    transitions::apply(msg, &sessions, client.as_ref(), &config).await;
+                    transitions::apply(msg, &sessions, &client, &config).await;
                 }
             }
         }

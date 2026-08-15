@@ -1,3 +1,4 @@
+mod idle_timer;
 mod server;
 mod session;
 mod transitions;
