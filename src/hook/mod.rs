@@ -18,12 +18,7 @@ use crate::kitty::WindowTarget;
 /// process's own environment), then forwards a single message to the
 /// daemon, spawning it first if needed. The daemon owns all Kitty IPC and
 /// session state from here on.
-pub fn run(
-    event: &str,
-    matcher: Option<&str>,
-    read_stdin: bool,
-    socket_path: &Path,
-) -> Result<()> {
+pub fn run(event: &str, matcher: Option<&str>, read_stdin: bool, socket_path: &Path) -> Result<()> {
     let raw = if read_stdin {
         let mut buf = String::new();
         io::stdin().read_to_string(&mut buf).unwrap_or(0);
@@ -42,7 +37,6 @@ pub fn run(
 
     let msg = HookMessage {
         session_id: payload.session_id,
-        transcript_path: payload.transcript_path,
         target,
         kind,
     };

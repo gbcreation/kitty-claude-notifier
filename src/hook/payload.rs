@@ -6,7 +6,6 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize, Default)]
 pub struct HookPayload {
     pub session_id: Option<String>,
-    pub transcript_path: Option<String>,
 }
 
 impl HookPayload {

@@ -18,10 +18,10 @@ impl ProcessKittyClient {
     fn run(&self, args: &[&str]) -> Result<Output> {
         let mut cmd = Command::new("kitten");
         cmd.arg("@");
-        if let Ok(listen_on) = env::var("KITTY_LISTEN_ON") {
-            if !listen_on.is_empty() {
-                cmd.args(["--to", &listen_on]);
-            }
+        if let Ok(listen_on) = env::var("KITTY_LISTEN_ON")
+            && !listen_on.is_empty()
+        {
+            cmd.args(["--to", &listen_on]);
         }
         cmd.args(args);
         let output = cmd.output().context("failed to spawn kitten")?;

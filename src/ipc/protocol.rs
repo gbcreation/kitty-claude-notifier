@@ -7,7 +7,6 @@ use crate::state::State;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookMessage {
     pub session_id: Option<String>,
-    pub transcript_path: Option<String>,
     pub target: WindowTarget,
     pub kind: MessageKind,
 }

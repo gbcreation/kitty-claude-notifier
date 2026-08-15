@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 fn config_dir() -> PathBuf {
     let home = std::env::var("HOME").expect("HOME must be set");
-    PathBuf::from(home).join(".config").join("kitty-claude-notifier")
+    PathBuf::from(home)
+        .join(".config")
+        .join("kitty-claude-notifier")
 }
 
 pub fn config_path() -> PathBuf {

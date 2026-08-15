@@ -28,7 +28,10 @@ fn init_logging() -> Result<()> {
     if let Some(parent) = log_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let file = OpenOptions::new().create(true).append(true).open(&log_path)?;
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)?;
     tracing_subscriber::fmt()
         .with_writer(file)
         .with_ansi(false)
@@ -48,6 +51,7 @@ async fn async_run(socket_path: &Path, config: Config) -> Result<()> {
     let lock_file = OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(false)
         .open(&lock_path)
         .with_context(|| format!("failed to open {}", lock_path.display()))?;
     let mut lock = fd_lock::RwLock::new(lock_file);

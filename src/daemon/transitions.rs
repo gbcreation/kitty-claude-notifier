@@ -61,8 +61,6 @@ pub async fn apply(
                     session_id,
                     Session {
                         state,
-                        target: msg.target,
-                        transcript_path: msg.transcript_path,
                         idle_timer,
                         resume_watch,
                     },
@@ -71,11 +69,11 @@ pub async fn apply(
         }
         MessageKind::Cleanup => {
             kitty::apply(client.as_ref(), &msg.target, "", "NONE");
-            if let Some(session_id) = msg.session_id {
-                if let Some(old) = sessions.lock().await.remove(&session_id) {
-                    abort_timers(&old);
-                    tracing::info!(%session_id, "session cleaned up");
-                }
+            if let Some(session_id) = msg.session_id
+                && let Some(old) = sessions.lock().await.remove(&session_id)
+            {
+                abort_timers(&old);
+                tracing::info!(%session_id, "session cleaned up");
             }
         }
     }
@@ -87,5 +85,148 @@ fn abort_timers(session: &Session) {
     }
     if let Some(handle) = &session.resume_watch {
         handle.abort();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kitty::WindowTarget;
+    use crate::kitty::fake::FakeKittyClient;
+
+    fn harness() -> (Arc<Mutex<SessionTable>>, Arc<FakeKittyClient>, Arc<Config>) {
+        (
+            Arc::new(Mutex::new(SessionTable::new())),
+            Arc::new(FakeKittyClient::new(vec![])),
+            Arc::new(Config::default()),
+        )
+    }
+
+    fn as_trait_object(fake: &Arc<FakeKittyClient>) -> Arc<dyn KittyClient + Send + Sync> {
+        fake.clone()
+    }
+
+    fn set_state_msg(session_id: &str, state: State) -> HookMessage {
+        HookMessage {
+            session_id: Some(session_id.to_string()),
+            target: WindowTarget::Id("1".to_string()),
+            kind: MessageKind::SetState(state),
+        }
+    }
+
+    #[tokio::test]
+    async fn permission_arms_resume_watch_but_not_idle_timer() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Permission),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert_eq!(session.state, State::Permission);
+        assert!(session.resume_watch.is_some());
+        assert!(session.idle_timer.is_none());
+    }
+
+    #[tokio::test]
+    async fn waiting_arms_both_timers() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Waiting),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert!(session.resume_watch.is_some());
+        assert!(session.idle_timer.is_some());
+    }
+
+    #[tokio::test]
+    async fn working_arms_neither_timer() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Working),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert!(session.resume_watch.is_none());
+        assert!(session.idle_timer.is_none());
+    }
+
+    #[tokio::test]
+    async fn fresh_message_aborts_previous_session_timers() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Waiting),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let (old_idle, old_resume) = {
+            let table = sessions.lock().await;
+            let session = table.get("s1").unwrap();
+            (
+                session.idle_timer.as_ref().unwrap().abort_handle(),
+                session.resume_watch.as_ref().unwrap().abort_handle(),
+            )
+        };
+        assert!(!old_idle.is_finished());
+        assert!(!old_resume.is_finished());
+
+        // A fresh message for the same session should retire both.
+        apply(
+            set_state_msg("s1", State::Done),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        // Give the aborted tasks a moment to actually stop.
+        tokio::task::yield_now().await;
+        assert!(old_idle.is_finished());
+        assert!(old_resume.is_finished());
+    }
+
+    #[tokio::test]
+    async fn cleanup_removes_session_and_updates_tab() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Working),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let msg = HookMessage {
+            session_id: Some("s1".to_string()),
+            target: WindowTarget::Id("1".to_string()),
+            kind: MessageKind::Cleanup,
+        };
+        apply(msg, &sessions, &client, &config).await;
+
+        assert!(sessions.lock().await.get("s1").is_none());
+        assert_eq!(fake.last_title(), Some(String::new()));
     }
 }

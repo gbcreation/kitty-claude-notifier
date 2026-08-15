@@ -1,7 +1,11 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "kitty-claude-notifier", version, about = "Reactive Kitty tab indicators for Claude Code")]
+#[command(
+    name = "kitty-claude-notifier",
+    version,
+    about = "Reactive Kitty tab indicators for Claude Code"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

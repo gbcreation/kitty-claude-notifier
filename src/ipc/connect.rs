@@ -31,7 +31,10 @@ fn connect_or_spawn_daemon(socket_path: &Path) -> Result<UnixStream> {
             return Ok(stream);
         }
     }
-    anyhow::bail!("daemon did not start listening at {}", socket_path.display())
+    anyhow::bail!(
+        "daemon did not start listening at {}",
+        socket_path.display()
+    )
 }
 
 fn spawn_daemon_detached() -> Result<()> {

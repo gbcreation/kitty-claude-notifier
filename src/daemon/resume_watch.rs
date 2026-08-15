@@ -89,3 +89,142 @@ pub fn spawn(
         );
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kitty::fake::FakeKittyClient;
+
+    use super::super::session::Session;
+
+    fn config_with_interval(ms: u64) -> Arc<Config> {
+        Arc::new(Config {
+            resume_poll_interval_ms: ms,
+            ..Config::default()
+        })
+    }
+
+    async fn seed_session(sessions: &Arc<Mutex<SessionTable>>, id: &str, state: State) {
+        sessions.lock().await.insert(
+            id.to_string(),
+            Session {
+                state,
+                idle_timer: None,
+                resume_watch: None,
+            },
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn resolves_after_two_consecutive_clear_polls() {
+        let config = config_with_interval(100);
+        let target = WindowTarget::Id("1".to_string());
+        let fake = Arc::new(FakeKittyClient::new(vec![
+            "do you want to proceed?",
+            "do you want to proceed?",
+            "cleared",
+            "cleared",
+        ]));
+        let client: Arc<dyn KittyClient + Send + Sync> = fake.clone();
+        let sessions: Arc<Mutex<SessionTable>> = Arc::new(Mutex::new(SessionTable::new()));
+        seed_session(&sessions, "s1", State::Permission).await;
+
+        let handle = spawn(
+            "s1".to_string(),
+            target.clone(),
+            sessions.clone(),
+            client,
+            config.clone(),
+        );
+
+        for _ in 0..4 {
+            tokio::time::advance(Duration::from_millis(config.resume_poll_interval_ms)).await;
+        }
+        handle.await.unwrap();
+
+        let table = sessions.lock().await;
+        assert_eq!(table.get("s1").unwrap().state, State::Working);
+        assert_eq!(fake.last_title(), Some(config.title_for(State::Working)));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn marker_reappearing_resets_the_confirmation_count() {
+        let config = config_with_interval(100);
+        let target = WindowTarget::Id("1".to_string());
+        // clear, present, clear, clear: must NOT resolve after the first
+        // clear+present pair — only after two FRESH consecutive clears.
+        let fake = Arc::new(FakeKittyClient::new(vec![
+            "cleared",
+            "do you want to proceed?",
+            "cleared",
+            "cleared",
+        ]));
+        let client: Arc<dyn KittyClient + Send + Sync> = fake.clone();
+        let sessions: Arc<Mutex<SessionTable>> = Arc::new(Mutex::new(SessionTable::new()));
+        seed_session(&sessions, "s1", State::Permission).await;
+
+        let handle = spawn(
+            "s1".to_string(),
+            target.clone(),
+            sessions.clone(),
+            client,
+            config.clone(),
+        );
+
+        for _ in 0..2 {
+            tokio::time::advance(Duration::from_millis(config.resume_poll_interval_ms)).await;
+        }
+        tokio::task::yield_now().await;
+        assert!(
+            !handle.is_finished(),
+            "must not resolve on a single clear tick"
+        );
+
+        for _ in 0..2 {
+            tokio::time::advance(Duration::from_millis(config.resume_poll_interval_ms)).await;
+        }
+        handle.await.unwrap();
+        assert_eq!(
+            sessions.lock().await.get("s1").unwrap().state,
+            State::Working
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn resolution_aborts_sibling_idle_timer() {
+        let config = config_with_interval(100);
+        let target = WindowTarget::Id("1".to_string());
+        let fake = Arc::new(FakeKittyClient::new(vec!["cleared", "cleared"]));
+        let client: Arc<dyn KittyClient + Send + Sync> = fake.clone();
+        let sessions: Arc<Mutex<SessionTable>> = Arc::new(Mutex::new(SessionTable::new()));
+
+        // Simulate a Waiting session: both timers armed.
+        let idle_handle = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(999)).await;
+        });
+        let idle_abort = idle_handle.abort_handle();
+        sessions.lock().await.insert(
+            "s1".to_string(),
+            Session {
+                state: State::Waiting,
+                idle_timer: Some(idle_handle),
+                resume_watch: None,
+            },
+        );
+
+        let handle = spawn(
+            "s1".to_string(),
+            target.clone(),
+            sessions.clone(),
+            client,
+            config.clone(),
+        );
+        for _ in 0..2 {
+            tokio::time::advance(Duration::from_millis(config.resume_poll_interval_ms)).await;
+        }
+        handle.await.unwrap();
+
+        tokio::task::yield_now().await;
+        assert!(idle_abort.is_finished());
+    }
+}

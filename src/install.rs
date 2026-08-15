@@ -4,7 +4,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::paths;
 
@@ -108,8 +108,7 @@ fn install_binary() -> Result<String> {
     if let Some(parent) = installed_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::copy(&current_exe, &installed_path)
-        .context("failed to copy binary to install location")?;
+    fs::copy(&current_exe, &installed_path).context("failed to copy binary to install location")?;
     let mut perms = fs::metadata(&installed_path)?.permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&installed_path, perms)?;
@@ -151,6 +150,57 @@ pub fn install() -> Result<()> {
     }
 
     let mut root: Value = serde_json::from_str(&raw).context("failed to parse settings.json")?;
+    let added = merge_hooks(&mut root, &exe)?;
+    write_settings(&path, &root)?;
+    println!("{added} hook entries added to {}", path.display());
+    println!(
+        "Note: ensure Kitty has 'allow_remote_control yes' and a 'listen_on' socket configured \
+         (needed for kitten @ to reach Kitty from hook processes with no controlling TTY)."
+    );
+    Ok(())
+}
+
+pub fn uninstall() -> Result<()> {
+    let marker = paths::installed_binary_path().to_string_lossy().to_string();
+    let path = settings_path();
+
+    if path.exists() {
+        let raw = fs::read_to_string(&path)?;
+        let mut root: Value = serde_json::from_str(&raw)?;
+
+        let removed_any = remove_hooks(&mut root, &marker);
+
+        if removed_any {
+            write_settings(&path, &root)?;
+            println!("Hooks removed from {}", path.display());
+        } else {
+            println!(
+                "No kitty-claude-notifier hooks found in {} — nothing to remove.",
+                path.display()
+            );
+        }
+    } else {
+        println!("{} not found — nothing to remove.", path.display());
+    }
+
+    let installed_path = paths::installed_binary_path();
+    if installed_path.exists() {
+        fs::remove_file(&installed_path)?;
+        println!("Removed installed binary at {}", installed_path.display());
+    }
+    if let Some(dir) = installed_path.parent() {
+        // Best-effort: only succeeds if now-empty. config.toml lives one
+        // level up and is deliberately left in place.
+        let _ = fs::remove_dir(dir);
+    }
+    Ok(())
+}
+
+/// Pure JSON transform — no file I/O — so it's directly unit-testable.
+/// Appends any of our hook entries not already present under `root.hooks`,
+/// creating `hooks` and each event's array as needed, without touching any
+/// existing entries (including another tool's). Returns how many were added.
+fn merge_hooks(root: &mut Value, exe: &str) -> Result<usize> {
     let root_obj = root
         .as_object_mut()
         .context("settings.json root must be an object")?;
@@ -168,7 +218,7 @@ pub fn install() -> Result<()> {
             .as_array_mut()
             .context("hook entries must be an array")?;
 
-        let command = hook_command(&exe, spec);
+        let command = hook_command(exe, spec);
         let already_present = entries.iter().any(|entry| {
             entry
                 .get("hooks")
@@ -196,76 +246,133 @@ pub fn install() -> Result<()> {
         entries.push(entry);
         added += 1;
     }
-
-    write_settings(&path, &root)?;
-    println!("{added} hook entries added to {}", path.display());
-    println!(
-        "Note: ensure Kitty has 'allow_remote_control yes' and a 'listen_on' socket configured \
-         (needed for kitten @ to reach Kitty from hook processes with no controlling TTY)."
-    );
-    Ok(())
+    Ok(added)
 }
 
-pub fn uninstall() -> Result<()> {
-    let marker = paths::installed_binary_path().to_string_lossy().to_string();
-    let path = settings_path();
-
+/// Pure JSON transform — no file I/O. Removes only command entries whose
+/// string contains `marker`, from every event's hook array, dropping any
+/// event key left with an empty array. Returns whether anything changed.
+fn remove_hooks(root: &mut Value, marker: &str) -> bool {
     let mut removed_any = false;
-    if path.exists() {
-        let raw = fs::read_to_string(&path)?;
-        let mut root: Value = serde_json::from_str(&raw)?;
-
-        if let Some(hooks) = root.get_mut("hooks").and_then(|h| h.as_object_mut()) {
-            let mut empty_keys = Vec::new();
-            for (key, entries) in hooks.iter_mut() {
-                let Some(arr) = entries.as_array_mut() else {
-                    continue;
-                };
-                arr.retain_mut(|entry| {
-                    if let Some(cmds) = entry.get_mut("hooks").and_then(|h| h.as_array_mut()) {
-                        let before = cmds.len();
-                        cmds.retain(|c| {
-                            !c.get("command")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.contains(&marker))
-                                .unwrap_or(false)
-                        });
-                        if cmds.len() != before {
-                            removed_any = true;
-                        }
-                        !cmds.is_empty()
-                    } else {
-                        true
-                    }
+    let Some(hooks) = root.get_mut("hooks").and_then(|h| h.as_object_mut()) else {
+        return false;
+    };
+    let mut empty_keys = Vec::new();
+    for (key, entries) in hooks.iter_mut() {
+        let Some(arr) = entries.as_array_mut() else {
+            continue;
+        };
+        arr.retain_mut(|entry| {
+            if let Some(cmds) = entry.get_mut("hooks").and_then(|h| h.as_array_mut()) {
+                let before = cmds.len();
+                cmds.retain(|c| {
+                    !c.get("command")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.contains(marker))
+                        .unwrap_or(false)
                 });
-                if arr.is_empty() {
-                    empty_keys.push(key.clone());
+                if cmds.len() != before {
+                    removed_any = true;
                 }
+                !cmds.is_empty()
+            } else {
+                true
             }
-            for key in empty_keys {
-                hooks.remove(&key);
+        });
+        if arr.is_empty() {
+            empty_keys.push(key.clone());
+        }
+    }
+    for key in empty_keys {
+        hooks.remove(&key);
+    }
+    removed_any
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EXE: &str = "/home/user/.config/kitty-claude-notifier/bin/kitty-claude-notifier";
+
+    #[test]
+    fn merge_adds_all_hooks_into_empty_settings() {
+        let mut root = json!({});
+        let added = merge_hooks(&mut root, EXE).unwrap();
+        assert_eq!(added, HOOKS.len());
+        assert_eq!(root["hooks"]["Notification"].as_array().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn merge_is_idempotent() {
+        let mut root = json!({});
+        merge_hooks(&mut root, EXE).unwrap();
+        let added_second_time = merge_hooks(&mut root, EXE).unwrap();
+        assert_eq!(added_second_time, 0);
+    }
+
+    #[test]
+    fn merge_preserves_another_tools_existing_entries() {
+        let mut root = json!({
+            "hooks": {
+                "UserPromptSubmit": [
+                    {"hooks": [{"type": "command", "command": "/other/tool --state working --stdin", "async": true}]}
+                ],
+                "PreToolUse": [
+                    {"matcher": "Bash", "hooks": [{"type": "command", "command": "rtk hook claude"}]}
+                ]
             }
-        }
+        });
+        merge_hooks(&mut root, EXE).unwrap();
 
-        if removed_any {
-            write_settings(&path, &root)?;
-            println!("Hooks removed from {}", path.display());
-        } else {
-            println!("No kitty-claude-notifier hooks found in {} — nothing to remove.", path.display());
-        }
-    } else {
-        println!("{} not found — nothing to remove.", path.display());
+        // The other tool's entry survives untouched...
+        let user_prompt = root["hooks"]["UserPromptSubmit"].as_array().unwrap();
+        assert_eq!(user_prompt.len(), 2);
+        assert_eq!(
+            user_prompt[0]["hooks"][0]["command"],
+            "/other/tool --state working --stdin"
+        );
+        // ...and an event we never touch (PreToolUse) is untouched entirely.
+        assert_eq!(root["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
     }
 
-    let installed_path = paths::installed_binary_path();
-    if installed_path.exists() {
-        fs::remove_file(&installed_path)?;
-        println!("Removed installed binary at {}", installed_path.display());
+    #[test]
+    fn remove_deletes_only_our_entries_and_empty_keys() {
+        let mut root = json!({});
+        merge_hooks(&mut root, EXE).unwrap();
+        // Add a foreign entry sharing one of our event keys.
+        root["hooks"]["Stop"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"hooks": [{"type": "command", "command": "/other/tool --state done"}]}));
+
+        let removed = remove_hooks(&mut root, EXE);
+        assert!(removed);
+
+        // Stop keeps the foreign entry, loses ours.
+        let stop = root["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1);
+        assert_eq!(stop[0]["hooks"][0]["command"], "/other/tool --state done");
+
+        // Events with nothing left (e.g. StopFailure, only ever ours) are
+        // removed entirely rather than left as an empty array.
+        assert!(root["hooks"].get("StopFailure").is_none());
     }
-    if let Some(dir) = installed_path.parent() {
-        // Best-effort: only succeeds if now-empty. config.toml lives one
-        // level up and is deliberately left in place.
-        let _ = fs::remove_dir(dir);
+
+    #[test]
+    fn remove_on_settings_without_our_hooks_is_a_noop() {
+        let mut root = json!({
+            "hooks": {
+                "UserPromptSubmit": [
+                    {"hooks": [{"type": "command", "command": "/other/tool --state working"}]}
+                ]
+            }
+        });
+        let removed = remove_hooks(&mut root, EXE);
+        assert!(!removed);
+        assert_eq!(
+            root["hooks"]["UserPromptSubmit"].as_array().unwrap().len(),
+            1
+        );
     }
-    Ok(())
 }

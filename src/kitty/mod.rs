@@ -1,3 +1,5 @@
+#[cfg(test)]
+pub mod fake;
 mod process_client;
 mod target;
 

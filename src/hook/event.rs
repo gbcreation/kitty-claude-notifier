@@ -27,10 +27,16 @@ mod tests {
 
     #[test]
     fn maps_known_events() {
-        assert_eq!(resolve_state("user-prompt-submit", None), Some(State::Working));
+        assert_eq!(
+            resolve_state("user-prompt-submit", None),
+            Some(State::Working)
+        );
         assert_eq!(resolve_state("stop", None), Some(State::Done));
         assert_eq!(resolve_state("stop-failure", None), Some(State::Error));
-        assert_eq!(resolve_state("post-tool-use-failure", None), Some(State::Error));
+        assert_eq!(
+            resolve_state("post-tool-use-failure", None),
+            Some(State::Error)
+        );
     }
 
     #[test]
@@ -39,7 +45,10 @@ mod tests {
             resolve_state("notification", Some("permission_prompt")),
             Some(State::Permission)
         );
-        assert_eq!(resolve_state("notification", Some("idle_prompt")), Some(State::Waiting));
+        assert_eq!(
+            resolve_state("notification", Some("idle_prompt")),
+            Some(State::Waiting)
+        );
         assert_eq!(
             resolve_state("notification", Some("elicitation_dialog")),
             Some(State::Waiting)

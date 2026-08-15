@@ -2,14 +2,11 @@ use std::collections::HashMap;
 
 use tokio::task::JoinHandle;
 
-use crate::kitty::WindowTarget;
 use crate::state::State;
 
 #[derive(Debug)]
 pub struct Session {
     pub state: State,
-    pub target: WindowTarget,
-    pub transcript_path: Option<String>,
     /// Pending idle-timeout task (armed for Done/Waiting), if any.
     pub idle_timer: Option<JoinHandle<()>>,
     /// Pending resume-detection screen-scrape task (armed for
