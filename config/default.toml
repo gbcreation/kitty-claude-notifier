@@ -21,6 +21,24 @@ permission_markers = [
     "❯ 1. yes",
 ]
 
+# Off by default. When enabled, plays a sound on entering
+# Permission/Waiting (needs your input) and on Done (a turn finished).
+# Nothing plays for a tab you're already looking at (its focused tab)
+# unless sound_play_when_focused is set. Built-in sounds require a
+# system audio player to be installed (paplay/pw-play/ffplay/mpg123/mpv
+# on Linux, afplay on macOS) — silently does nothing if none are found.
+sound_enabled = false
+
+# Off by default. Set true to play the sound even for the tab you're
+# currently focused on (normally suppressed).
+sound_play_when_focused = false
+
+# Optional custom sound file paths; omit either to use the built-in
+# default (sourced from herdrdev/herdr, see assets/sounds/NOTICE.md).
+# [sounds]
+# request = "/path/to/custom-request-sound.mp3"
+# done = "/path/to/custom-done-sound.mp3"
+
 # Per-state icon overrides: a glyph prepended to the tab's *existing*
 # title (whatever the shell already set it to), rendered in the given
 # color. Must be a plain Unicode symbol or Nerd Font glyph — emoji carry

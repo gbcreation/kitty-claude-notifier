@@ -57,6 +57,15 @@ pub struct Icon {
     pub text: Option<String>,
 }
 
+/// Custom sound file overrides — omit either to use the built-in default
+/// (sourced from herdrdev/herdr, see assets/sounds/NOTICE.md).
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+#[serde(default)]
+pub struct SoundPaths {
+    pub request: Option<String>,
+    pub done: Option<String>,
+}
+
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Config {
@@ -69,6 +78,13 @@ pub struct Config {
     /// Text markers that indicate a permission prompt is still on screen —
     /// used by the resume-detection screen scrape (not yet wired up).
     pub permission_markers: Vec<String>,
+    /// Off by default — a bigger behavior change than a visual tweak.
+    pub sound_enabled: bool,
+    /// Off by default — a sound normally doesn't play for a tab you're
+    /// already looking at (its `is_focused` tab is true). Set true to
+    /// play regardless of focus.
+    pub sound_play_when_focused: bool,
+    pub sounds: SoundPaths,
 }
 
 impl Default for Config {
@@ -79,6 +95,9 @@ impl Default for Config {
             icons: HashMap::new(),
             colors: HashMap::new(),
             permission_markers: default_permission_markers(),
+            sound_enabled: false,
+            sound_play_when_focused: false,
+            sounds: SoundPaths::default(),
         }
     }
 }
@@ -186,6 +205,32 @@ mod tests {
         let cfg: Config = toml::from_str(raw).unwrap();
         let icon = cfg.icon_for(State::Permission);
         assert_eq!(icon.text.as_deref(), Some("NEEDS APPROVAL"));
+    }
+
+    #[test]
+    fn sound_is_disabled_by_default() {
+        assert!(!Config::default().sound_enabled);
+        assert!(!Config::default().sound_play_when_focused);
+        assert_eq!(Config::default().sounds, SoundPaths::default());
+    }
+
+    #[test]
+    fn sound_config_parses() {
+        let raw = r##"
+            sound_enabled = true
+            sound_play_when_focused = true
+
+            [sounds]
+            request = "/tmp/custom-request.mp3"
+        "##;
+        let cfg: Config = toml::from_str(raw).unwrap();
+        assert!(cfg.sound_enabled);
+        assert!(cfg.sound_play_when_focused);
+        assert_eq!(
+            cfg.sounds.request.as_deref(),
+            Some("/tmp/custom-request.mp3")
+        );
+        assert_eq!(cfg.sounds.done, None);
     }
 
     #[test]

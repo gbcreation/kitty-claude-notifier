@@ -3,7 +3,7 @@ use std::process::{Command, Output};
 
 use anyhow::{Context, Result};
 
-use super::{KittyClient, WindowTarget};
+use super::{KittyClient, TabInfo, WindowTarget};
 
 /// Real Kitty IPC — shells out to `kitten @`, always via the configured
 /// KITTY_LISTEN_ON socket when present rather than relying on the calling
@@ -67,25 +67,32 @@ impl KittyClient for ProcessKittyClient {
         Ok(())
     }
 
-    fn get_tab_title(&self, target: &WindowTarget) -> Result<String> {
+    fn get_tab_info(&self, target: &WindowTarget) -> Result<TabInfo> {
         let output = self.run(&["ls", "--match", &target.match_expr()])?;
         // `kitten @ ls` returns each matched window's full environment
         // variables (including secrets) and other sensitive process
         // details alongside the title. Parse just enough to extract the
-        // title and drop the rest immediately — never log `output` or the
-        // parsed value.
+        // title and focus state and drop the rest immediately — never log
+        // `output` or the parsed value.
         let parsed: serde_json::Value =
             serde_json::from_slice(&output.stdout).context("failed to parse kitten @ ls output")?;
-        parsed
+        let tab = parsed
             .as_array()
             .and_then(|os_windows| os_windows.first())
             .and_then(|w| w.get("tabs"))
             .and_then(|tabs| tabs.as_array())
             .and_then(|tabs| tabs.first())
-            .and_then(|tab| tab.get("title"))
+            .context("no matching tab found in kitten @ ls output")?;
+        let title = tab
+            .get("title")
             .and_then(|t| t.as_str())
             .map(str::to_string)
-            .context("no matching tab found in kitten @ ls output")
+            .context("no title found in kitten @ ls output")?;
+        let is_focused = tab
+            .get("is_focused")
+            .and_then(|f| f.as_bool())
+            .unwrap_or(false);
+        Ok(TabInfo { title, is_focused })
     }
 
     fn get_text(&self, target: &WindowTarget) -> Result<String> {

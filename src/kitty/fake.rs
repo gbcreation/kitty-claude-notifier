@@ -2,14 +2,14 @@ use std::sync::Mutex;
 
 use anyhow::Result;
 
-use super::{KittyClient, WindowTarget};
+use super::{KittyClient, TabInfo, WindowTarget};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Call {
     SetTabTitle(WindowTarget, String),
     /// (target, active_bg, inactive_bg)
     SetTabColor(WindowTarget, String, String),
-    GetTabTitle(WindowTarget),
+    GetTabInfo(WindowTarget),
     GetText(WindowTarget),
 }
 
@@ -17,7 +17,7 @@ pub enum Call {
 /// call and returns scripted `get_text` responses, no subprocess involved.
 ///
 /// `tab_title` behaves like a real tab: `set_tab_title` updates it and
-/// `get_tab_title` reads it back, so a test can verify icon-stripping
+/// `get_tab_info` reads it back, so a test can verify icon-stripping
 /// across repeated `apply()` calls the same way the real round-trip
 /// through Kitty would.
 pub struct FakeKittyClient {
@@ -26,6 +26,7 @@ pub struct FakeKittyClient {
     /// entry repeats once exhausted (so a test can under-specify the tail).
     get_text_script: Mutex<Vec<String>>,
     tab_title: Mutex<String>,
+    is_focused: Mutex<bool>,
 }
 
 impl FakeKittyClient {
@@ -34,6 +35,7 @@ impl FakeKittyClient {
             calls: Mutex::new(Vec::new()),
             get_text_script: Mutex::new(get_text_script.into_iter().map(String::from).collect()),
             tab_title: Mutex::new(String::new()),
+            is_focused: Mutex::new(false),
         }
     }
 
@@ -41,6 +43,12 @@ impl FakeKittyClient {
     /// before any `apply()` call prepends an icon onto it.
     pub fn with_initial_title(self, title: &str) -> Self {
         *self.tab_title.lock().unwrap() = title.to_string();
+        self
+    }
+
+    /// Seeds the tab's focus state — defaults to unfocused.
+    pub fn with_focused(self, is_focused: bool) -> Self {
+        *self.is_focused.lock().unwrap() = is_focused;
         self
     }
 
@@ -98,12 +106,15 @@ impl KittyClient for FakeKittyClient {
         Ok(())
     }
 
-    fn get_tab_title(&self, target: &WindowTarget) -> Result<String> {
+    fn get_tab_info(&self, target: &WindowTarget) -> Result<TabInfo> {
         self.calls
             .lock()
             .unwrap()
-            .push(Call::GetTabTitle(target.clone()));
-        Ok(self.tab_title.lock().unwrap().clone())
+            .push(Call::GetTabInfo(target.clone()));
+        Ok(TabInfo {
+            title: self.tab_title.lock().unwrap().clone(),
+            is_focused: *self.is_focused.lock().unwrap(),
+        })
     }
 
     fn get_text(&self, target: &WindowTarget) -> Result<String> {
