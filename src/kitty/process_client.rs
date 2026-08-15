@@ -24,7 +24,16 @@ impl ProcessKittyClient {
             }
         }
         cmd.args(args);
-        cmd.output().context("failed to spawn kitten")
+        let output = cmd.output().context("failed to spawn kitten")?;
+        if !output.status.success() {
+            anyhow::bail!(
+                "kitten @ {} exited with {}: {}",
+                args.join(" "),
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        Ok(output)
     }
 }
 
@@ -36,14 +45,13 @@ impl Default for ProcessKittyClient {
 
 impl KittyClient for ProcessKittyClient {
     fn set_tab_title(&self, target: &WindowTarget, title: &str) -> Result<()> {
-        // Non-fatal by design: a Kitty hiccup should never break the caller.
-        let _ = self.run(&["set-tab-title", "--match", &target.match_expr(), title]);
+        self.run(&["set-tab-title", "--match", &target.match_expr(), title])?;
         Ok(())
     }
 
     fn set_tab_color(&self, target: &WindowTarget, active_bg: &str) -> Result<()> {
         let spec = format!("active_bg={active_bg}");
-        let _ = self.run(&["set-tab-color", "--match", &target.match_expr(), &spec]);
+        self.run(&["set-tab-color", "--match", &target.match_expr(), &spec])?;
         Ok(())
     }
 

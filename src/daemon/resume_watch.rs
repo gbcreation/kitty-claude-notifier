@@ -6,7 +6,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 use crate::config::Config;
-use crate::kitty::{KittyClient, WindowTarget};
+use crate::kitty::{self, KittyClient, WindowTarget};
 use crate::markers;
 use crate::state::State;
 
@@ -43,7 +43,10 @@ pub fn spawn(
 
             let text = match client.get_text(&target) {
                 Ok(text) => text,
-                Err(_) => continue, // transient IPC failure — try again next tick
+                Err(e) => {
+                    tracing::warn!(%session_id, "get_text failed, will retry: {e}");
+                    continue;
+                }
             };
             last_text = text.clone();
 
@@ -69,14 +72,20 @@ pub fn spawn(
                 session.resume_watch = None;
             }
             drop(table);
-            let _ = client.set_tab_title(&target, &config.title_for(State::Working));
-            let _ = client.set_tab_color(&target, &config.color_for(State::Working));
+            tracing::info!(%session_id, "resume detected — permission/waiting cleared");
+            kitty::apply(
+                client.as_ref(),
+                &target,
+                &config.title_for(State::Working),
+                &config.color_for(State::Working),
+            );
             return;
         }
 
-        eprintln!(
-            "kitty-claude-notifier: resume-watch for session {session_id} timed out \
-             after {MAX_WAIT:?} without detecting resolution; last screen text:\n{last_text}"
+        tracing::warn!(
+            %session_id,
+            timeout = ?MAX_WAIT,
+            "resume-watch timed out without detecting resolution; last screen text:\n{last_text}"
         );
     })
 }

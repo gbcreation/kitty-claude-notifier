@@ -14,3 +14,14 @@ pub trait KittyClient {
     fn set_tab_color(&self, target: &WindowTarget, active_bg: &str) -> Result<()>;
     fn get_text(&self, target: &WindowTarget) -> Result<String>;
 }
+
+/// Sets title + color together, logging (not propagating) any failure —
+/// a Kitty hiccup should never be fatal to the daemon.
+pub fn apply(client: &dyn KittyClient, target: &WindowTarget, title: &str, color: &str) {
+    if let Err(e) = client.set_tab_title(target, title) {
+        tracing::warn!("set_tab_title failed: {e}");
+    }
+    if let Err(e) = client.set_tab_color(target, color) {
+        tracing::warn!("set_tab_color failed: {e}");
+    }
+}

@@ -19,6 +19,13 @@ pub fn daemon_socket_path() -> PathBuf {
     config_dir().join("daemon.sock")
 }
 
+/// A real OS advisory lock (held for the daemon's whole lifetime, released
+/// automatically by the kernel on crash) gates daemon startup so two
+/// concurrently-spawned daemons can't race to bind the socket.
+pub fn daemon_lock_path() -> PathBuf {
+    config_dir().join("daemon.lock")
+}
+
 pub fn daemon_log_path() -> PathBuf {
     config_dir().join("daemon.log")
 }

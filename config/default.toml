@@ -1,6 +1,10 @@
 # kitty-claude-notifier configuration
 # Copied to ~/.config/kitty-claude-notifier/config.toml on install.
 # Any field left out here falls back to the built-in default.
+#
+# Top-level (non-table) keys must stay above the [titles]/[colors] table
+# headers below — TOML assigns any key after a [table] header to that
+# table, not to the document root.
 
 # Seconds before done/waiting -> idle.
 idle_timeout_secs = 300
@@ -8,6 +12,14 @@ idle_timeout_secs = 300
 # How often the resume-detection screen-scrape polls `kitten @ get-text`
 # while a session is stuck in permission/waiting (milliseconds).
 resume_poll_interval_ms = 500
+
+# Text markers (case-insensitive substring match) that indicate a
+# permission prompt is still visible on screen. Update this list if
+# Claude Code's prompt wording changes across versions.
+permission_markers = [
+    "do you want to proceed?",
+    "❯ 1. yes",
+]
 
 # Per-state tab title overrides. Omit a key to keep the built-in default.
 [titles]
@@ -27,11 +39,3 @@ waiting = "#00ffd5"
 done = "#00ffd5"
 idle = "NONE"
 error = "#ff6b00"
-
-# Text markers (case-insensitive substring match) that indicate a
-# permission prompt is still visible on screen. Update this list if
-# Claude Code's prompt wording changes across versions.
-permission_markers = [
-    "do you want to proceed?",
-    "❯ 1. yes",
-]

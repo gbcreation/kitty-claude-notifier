@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 
 use crate::config::Config;
 use crate::ipc::protocol::{HookMessage, MessageKind};
-use crate::kitty::KittyClient;
+use crate::kitty::{self, KittyClient};
 use crate::state::State;
 
 use super::idle_timer;
@@ -24,8 +24,12 @@ pub async fn apply(
 ) {
     match msg.kind {
         MessageKind::SetState(state) => {
-            let _ = client.set_tab_title(&msg.target, &config.title_for(state));
-            let _ = client.set_tab_color(&msg.target, &config.color_for(state));
+            kitty::apply(
+                client.as_ref(),
+                &msg.target,
+                &config.title_for(state),
+                &config.color_for(state),
+            );
             if let Some(session_id) = msg.session_id {
                 let mut table = sessions.lock().await;
                 // Any prior timers belong to a state this message
@@ -52,6 +56,7 @@ pub async fn apply(
                         config.clone(),
                     )
                 });
+                tracing::info!(%session_id, ?state, "session state updated");
                 table.insert(
                     session_id,
                     Session {
@@ -65,11 +70,11 @@ pub async fn apply(
             }
         }
         MessageKind::Cleanup => {
-            let _ = client.set_tab_title(&msg.target, "");
-            let _ = client.set_tab_color(&msg.target, "NONE");
+            kitty::apply(client.as_ref(), &msg.target, "", "NONE");
             if let Some(session_id) = msg.session_id {
                 if let Some(old) = sessions.lock().await.remove(&session_id) {
                     abort_timers(&old);
+                    tracing::info!(%session_id, "session cleaned up");
                 }
             }
         }

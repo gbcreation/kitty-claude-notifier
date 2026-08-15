@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 use crate::config::Config;
-use crate::kitty::{KittyClient, WindowTarget};
+use crate::kitty::{self, KittyClient, WindowTarget};
 use crate::state::State;
 
 use super::session::SessionTable;
@@ -34,8 +34,13 @@ pub fn spawn(
             }
             session.state = State::Idle;
             session.idle_timer = None;
-            let _ = client.set_tab_title(&target, &config.title_for(State::Idle));
-            let _ = client.set_tab_color(&target, &config.color_for(State::Idle));
+            tracing::info!(%session_id, "idle timeout reached");
+            kitty::apply(
+                client.as_ref(),
+                &target,
+                &config.title_for(State::Idle),
+                &config.color_for(State::Idle),
+            );
         }
     })
 }

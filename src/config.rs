@@ -90,4 +90,18 @@ mod tests {
         assert_eq!(cfg.title_for(State::Permission), "!! PERM !!");
         assert_eq!(cfg.title_for(State::Working), "⚡ Work");
     }
+
+    /// Regression test: a prior version of config/default.toml placed
+    /// `permission_markers` after the `[colors]` table header, so TOML
+    /// silently nested it *inside* `colors` instead of at the document
+    /// root — `colors: HashMap<String, String>` then failed to parse the
+    /// array as a string, and the daemon refused to start entirely.
+    #[test]
+    fn shipped_default_config_parses() {
+        let raw = include_str!("../config/default.toml");
+        let cfg: Config = toml::from_str(raw).expect("config/default.toml must parse");
+        assert!(!cfg.permission_markers.is_empty());
+        assert_eq!(cfg.colors.len(), 6);
+        assert_eq!(cfg.titles.len(), 6);
+    }
 }
