@@ -11,8 +11,12 @@ pub struct Cli {
 pub enum Commands {
     /// Invoked directly by a Claude Code hook; forwards the event to the daemon.
     Hook {
+        /// Claude Code's hook event name, e.g. "stop", "notification".
         #[arg(long)]
         event: String,
+        /// The Notification matcher that fired, e.g. "permission_prompt".
+        #[arg(long)]
+        matcher: Option<String>,
         #[arg(long)]
         stdin: bool,
     },

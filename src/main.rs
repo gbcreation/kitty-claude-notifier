@@ -9,8 +9,13 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Hook { event, stdin } => {
-            println!("hook: event={event} stdin={stdin} (not yet implemented)");
+        Commands::Hook {
+            event,
+            matcher,
+            stdin,
+        } => {
+            let client = ProcessKittyClient::new();
+            kitty_claude_notifier::hook::run(&event, matcher.as_deref(), stdin, &client)?;
         }
         Commands::Daemon => {
             println!("daemon: not yet implemented");
