@@ -12,6 +12,19 @@ to check.
 > **Vibe-coded:** this project was built through conversational
 > pair-programming with [Claude Code](https://claude.com/claude-code).
 
+## Table of contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Configuration](#configuration)
+- [Sound notifications](#sound-notifications)
+- [Why this exists](#why-this-exists)
+- [How it works](#how-it-works)
+- [Acknowledgements](#acknowledgements)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
 - **Live tab state**: a small colored icon prepended onto each tab's
