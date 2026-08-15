@@ -24,14 +24,9 @@ pub async fn apply(
 ) {
     match msg.kind {
         MessageKind::SetState(state) => {
+            let icon = config.icon_for(state);
             let (active, inactive) = config.colors_for(state);
-            kitty::apply(
-                client.as_ref(),
-                &msg.target,
-                &config.title_for(state),
-                &active,
-                &inactive,
-            );
+            kitty::apply(client.as_ref(), &msg.target, &icon, &active, &inactive);
             if let Some(session_id) = msg.session_id {
                 let mut table = sessions.lock().await;
                 // Any prior timers belong to a state this message
@@ -70,7 +65,7 @@ pub async fn apply(
             }
         }
         MessageKind::Cleanup => {
-            kitty::apply(client.as_ref(), &msg.target, "", "NONE", "NONE");
+            kitty::clear(client.as_ref(), &msg.target);
             if let Some(session_id) = msg.session_id
                 && let Some(old) = sessions.lock().await.remove(&session_id)
             {

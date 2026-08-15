@@ -33,14 +33,38 @@ impl ColorSpec {
     }
 }
 
+/// A per-state icon override: the glyph prepended to the tab's title, and
+/// the color it's rendered in. Must be a plain (non-emoji) Unicode symbol
+/// or Nerd Font glyph — emoji ignore ANSI foreground color.
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct IconSpec {
+    pub glyph: String,
+    pub color: String,
+    /// Fixed text to prepend the icon onto instead of the tab's live,
+    /// shell-set title — the old per-state custom-title behavior, now
+    /// combined with the icon rather than replaced by it. Omit to keep
+    /// prepending onto whatever the tab's title naturally is.
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+/// Resolved icon for a state: glyph, color, and — if configured — fixed
+/// text to use as the title's base instead of fetching it live.
+#[derive(Debug, PartialEq)]
+pub struct Icon {
+    pub glyph: String,
+    pub color: String,
+    pub text: Option<String>,
+}
+
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Config {
     pub idle_timeout_secs: u64,
     pub resume_poll_interval_ms: u64,
-    /// Per-state title overrides, keyed by State's Display (e.g. "permission").
-    pub titles: HashMap<String, String>,
-    /// Per-state color overrides, same keys as `titles`.
+    /// Per-state icon overrides, keyed by State's Display (e.g. "permission").
+    pub icons: HashMap<String, IconSpec>,
+    /// Per-state tab-background color overrides, same keys as `icons`.
     pub colors: HashMap<String, ColorSpec>,
     /// Text markers that indicate a permission prompt is still on screen —
     /// used by the resume-detection screen scrape (not yet wired up).
@@ -52,7 +76,7 @@ impl Default for Config {
         Self {
             idle_timeout_secs: 300,
             resume_poll_interval_ms: 500,
-            titles: HashMap::new(),
+            icons: HashMap::new(),
             colors: HashMap::new(),
             permission_markers: default_permission_markers(),
         }
@@ -69,11 +93,19 @@ impl Config {
         Ok(toml::from_str(&raw)?)
     }
 
-    pub fn title_for(&self, state: State) -> String {
-        self.titles
-            .get(&state.to_string())
-            .cloned()
-            .unwrap_or_else(|| state.default_title().to_string())
+    pub fn icon_for(&self, state: State) -> Icon {
+        match self.icons.get(&state.to_string()) {
+            Some(spec) => Icon {
+                glyph: spec.glyph.clone(),
+                color: spec.color.clone(),
+                text: spec.text.clone(),
+            },
+            None => Icon {
+                glyph: state.default_icon_glyph().to_string(),
+                color: state.default_icon_color().to_string(),
+                text: None,
+            },
+        }
     }
 
     /// Returns `(active_bg, inactive_bg)` for `state` — the built-in
@@ -108,9 +140,12 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_default_title_when_unset() {
+    fn falls_back_to_default_icon_when_unset() {
         let cfg = Config::default();
-        assert_eq!(cfg.title_for(State::Permission), "⛔ Perm");
+        let icon = cfg.icon_for(State::Permission);
+        assert_eq!(icon.glyph, "▲");
+        assert_eq!(icon.color, "#ffffff");
+        assert_eq!(icon.text, None);
     }
 
     #[test]
@@ -122,14 +157,35 @@ mod tests {
     }
 
     #[test]
-    fn override_replaces_default() {
-        let raw = r#"
-            [titles]
-            permission = "!! PERM !!"
-        "#;
+    fn icon_override_replaces_default() {
+        let raw = r##"
+            [icons.permission]
+            glyph = "!"
+            color = "#123456"
+        "##;
         let cfg: Config = toml::from_str(raw).unwrap();
-        assert_eq!(cfg.title_for(State::Permission), "!! PERM !!");
-        assert_eq!(cfg.title_for(State::Working), "⚡ Work");
+        let icon = cfg.icon_for(State::Permission);
+        assert_eq!(icon.glyph, "!");
+        assert_eq!(icon.color, "#123456");
+        assert_eq!(icon.text, None);
+
+        // Unrelated states are unaffected and still fall back to default.
+        let working = cfg.icon_for(State::Working);
+        assert_eq!(working.glyph, State::Working.default_icon_glyph());
+        assert_eq!(working.color, State::Working.default_icon_color());
+    }
+
+    #[test]
+    fn icon_text_override_is_used_instead_of_the_live_title() {
+        let raw = r##"
+            [icons.permission]
+            glyph = "▲"
+            color = "#ffffff"
+            text = "NEEDS APPROVAL"
+        "##;
+        let cfg: Config = toml::from_str(raw).unwrap();
+        let icon = cfg.icon_for(State::Permission);
+        assert_eq!(icon.text.as_deref(), Some("NEEDS APPROVAL"));
     }
 
     #[test]
@@ -178,6 +234,6 @@ mod tests {
         let cfg: Config = toml::from_str(raw).expect("config/default.toml must parse");
         assert!(!cfg.permission_markers.is_empty());
         assert_eq!(cfg.colors.len(), 6);
-        assert_eq!(cfg.titles.len(), 6);
+        assert_eq!(cfg.icons.len(), 6);
     }
 }

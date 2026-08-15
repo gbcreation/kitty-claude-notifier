@@ -9,16 +9,23 @@ pub enum Call {
     SetTabTitle(WindowTarget, String),
     /// (target, active_bg, inactive_bg)
     SetTabColor(WindowTarget, String, String),
+    GetTabTitle(WindowTarget),
     GetText(WindowTarget),
 }
 
 /// In-memory `KittyClient` for deterministic unit tests — records every
 /// call and returns scripted `get_text` responses, no subprocess involved.
+///
+/// `tab_title` behaves like a real tab: `set_tab_title` updates it and
+/// `get_tab_title` reads it back, so a test can verify icon-stripping
+/// across repeated `apply()` calls the same way the real round-trip
+/// through Kitty would.
 pub struct FakeKittyClient {
     calls: Mutex<Vec<Call>>,
     /// Successive get_text responses, consumed one per call; the last
     /// entry repeats once exhausted (so a test can under-specify the tail).
     get_text_script: Mutex<Vec<String>>,
+    tab_title: Mutex<String>,
 }
 
 impl FakeKittyClient {
@@ -26,7 +33,15 @@ impl FakeKittyClient {
         Self {
             calls: Mutex::new(Vec::new()),
             get_text_script: Mutex::new(get_text_script.into_iter().map(String::from).collect()),
+            tab_title: Mutex::new(String::new()),
         }
+    }
+
+    /// Seeds the tab's "natural" title as if the shell had already set it,
+    /// before any `apply()` call prepends an icon onto it.
+    pub fn with_initial_title(self, title: &str) -> Self {
+        *self.tab_title.lock().unwrap() = title.to_string();
+        self
     }
 
     pub fn calls(&self) -> Vec<Call> {
@@ -65,6 +80,7 @@ impl KittyClient for FakeKittyClient {
             .lock()
             .unwrap()
             .push(Call::SetTabTitle(target.clone(), title.to_string()));
+        *self.tab_title.lock().unwrap() = title.to_string();
         Ok(())
     }
 
@@ -80,6 +96,14 @@ impl KittyClient for FakeKittyClient {
             inactive_bg.to_string(),
         ));
         Ok(())
+    }
+
+    fn get_tab_title(&self, target: &WindowTarget) -> Result<String> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(Call::GetTabTitle(target.clone()));
+        Ok(self.tab_title.lock().unwrap().clone())
     }
 
     fn get_text(&self, target: &WindowTarget) -> Result<String> {

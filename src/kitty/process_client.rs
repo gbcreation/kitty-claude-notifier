@@ -67,6 +67,27 @@ impl KittyClient for ProcessKittyClient {
         Ok(())
     }
 
+    fn get_tab_title(&self, target: &WindowTarget) -> Result<String> {
+        let output = self.run(&["ls", "--match", &target.match_expr()])?;
+        // `kitten @ ls` returns each matched window's full environment
+        // variables (including secrets) and other sensitive process
+        // details alongside the title. Parse just enough to extract the
+        // title and drop the rest immediately — never log `output` or the
+        // parsed value.
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&output.stdout).context("failed to parse kitten @ ls output")?;
+        parsed
+            .as_array()
+            .and_then(|os_windows| os_windows.first())
+            .and_then(|w| w.get("tabs"))
+            .and_then(|tabs| tabs.as_array())
+            .and_then(|tabs| tabs.first())
+            .and_then(|tab| tab.get("title"))
+            .and_then(|t| t.as_str())
+            .map(str::to_string)
+            .context("no matching tab found in kitten @ ls output")
+    }
+
     fn get_text(&self, target: &WindowTarget) -> Result<String> {
         let output = self.run(&["get-text", "--match", &target.match_expr()])?;
         Ok(String::from_utf8_lossy(&output.stdout).to_string())

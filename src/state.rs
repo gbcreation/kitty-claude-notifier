@@ -17,14 +17,30 @@ pub enum State {
 }
 
 impl State {
-    pub fn default_title(&self) -> &'static str {
+    /// Default icon glyph prepended to the tab's existing title — a plain
+    /// (non-emoji) Unicode symbol, since emoji ignore ANSI foreground color.
+    pub fn default_icon_glyph(&self) -> &'static str {
         match self {
-            State::Working => "⚡ Work",
-            State::Permission => "⛔ Perm",
-            State::Waiting => "⏳ Wait",
-            State::Done => "✅ Done",
-            State::Idle => "💤 Idle",
-            State::Error => "❌ Error",
+            State::Working => "●",
+            State::Permission => "▲",
+            State::Waiting => "◐",
+            State::Done => "✓",
+            State::Idle => "○",
+            State::Error => "✕",
+        }
+    }
+
+    /// Default icon color (hex) — deliberately neutral/white rather than
+    /// matching `default_color()`'s hue: the tab background is often the
+    /// *same* saturated color, and a same-colored icon disappears into it.
+    pub fn default_icon_color(&self) -> &'static str {
+        match self {
+            State::Working => "#ffffff",
+            State::Permission => "#ffffff",
+            State::Waiting => "#ffffff",
+            State::Done => "#ffffff",
+            State::Idle => "#888888",
+            State::Error => "#ffffff",
         }
     }
 

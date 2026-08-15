@@ -2,6 +2,7 @@ pub mod cli;
 pub mod config;
 pub mod daemon;
 pub mod hook;
+pub mod icon;
 pub mod install;
 pub mod ipc;
 pub mod kitty;

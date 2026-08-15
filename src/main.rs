@@ -4,7 +4,7 @@ use std::time::Duration;
 use clap::Parser;
 use kitty_claude_notifier::cli::{Cli, Commands};
 use kitty_claude_notifier::config::Config;
-use kitty_claude_notifier::kitty::{KittyClient, ProcessKittyClient, WindowTarget};
+use kitty_claude_notifier::kitty::{self, ProcessKittyClient, WindowTarget};
 use kitty_claude_notifier::paths;
 use kitty_claude_notifier::state::State;
 
@@ -31,23 +31,27 @@ fn main() -> anyhow::Result<()> {
         Commands::Install => kitty_claude_notifier::install::install()?,
         Commands::Uninstall => kitty_claude_notifier::install::uninstall()?,
         Commands::Test => {
+            // kitty::apply/clear only log (never return errors) — without
+            // a subscriber those warnings would be silently dropped,
+            // defeating the point of a diagnostic command.
+            tracing_subscriber::fmt()
+                .with_writer(std::io::stderr)
+                .init();
             let config = Config::load(&paths::config_path())?;
-            run_test(&config)?;
+            run_test(&config);
         }
     }
     Ok(())
 }
 
-fn run_test(config: &Config) -> anyhow::Result<()> {
+fn run_test(config: &Config) {
     let client = ProcessKittyClient::new();
     let target = WindowTarget::from_env();
     println!("kitty-claude-notifier: sending test blink (target: {target:?})...");
+    let icon = config.icon_for(State::Permission);
     let (active, inactive) = config.colors_for(State::Permission);
-    client.set_tab_title(&target, &config.title_for(State::Permission))?;
-    client.set_tab_color(&target, &active, &inactive)?;
+    kitty::apply(&client, &target, &icon, &active, &inactive);
     sleep(Duration::from_millis(800));
-    client.set_tab_title(&target, "")?;
-    client.set_tab_color(&target, "NONE", "NONE")?;
+    kitty::clear(&client, &target);
     println!("kitty-claude-notifier: test complete");
-    Ok(())
 }

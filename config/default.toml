@@ -2,7 +2,7 @@
 # Copied to ~/.config/kitty-claude-notifier/config.toml on install.
 # Any field left out here falls back to the built-in default.
 #
-# Top-level (non-table) keys must stay above the [titles]/[colors] table
+# Top-level (non-table) keys must stay above the [icons]/[colors] table
 # headers below — TOML assigns any key after a [table] header to that
 # table, not to the document root.
 
@@ -21,14 +21,45 @@ permission_markers = [
     "❯ 1. yes",
 ]
 
-# Per-state tab title overrides. Omit a key to keep the built-in default.
-[titles]
-working = "⚡ Work"
-permission = "⛔ Perm"
-waiting = "⏳ Wait"
-done = "✅ Done"
-idle = "💤 Idle"
-error = "❌ Error"
+# Per-state icon overrides: a glyph prepended to the tab's *existing*
+# title (whatever the shell already set it to), rendered in the given
+# color. Must be a plain Unicode symbol or Nerd Font glyph — emoji carry
+# their own embedded color and ignore the `color` setting entirely.
+#
+# Colors default to white rather than matching the tab-background color
+# below — an icon the same color as its own background disappears.
+#
+# Add a `text` key to prepend the icon onto fixed text instead of the
+# tab's live title (the old per-state custom-title behavior, now
+# combined with the icon rather than replacing it), e.g.:
+#
+#   [icons.permission]
+#   glyph = "▲"
+#   color = "#ffffff"
+#   text = "NEEDS APPROVAL"
+[icons.working]
+glyph = "●"
+color = "#ffffff"
+
+[icons.permission]
+glyph = "▲"
+color = "#ffffff"
+
+[icons.waiting]
+glyph = "◐"
+color = "#ffffff"
+
+[icons.done]
+glyph = "✓"
+color = "#ffffff"
+
+[icons.idle]
+glyph = "○"
+color = "#888888"
+
+[icons.error]
+glyph = "✕"
+color = "#ffffff"
 
 # Per-state tab color overrides. A plain string applies to both the
 # focused and unfocused tab background ("NONE" clears it). To use a

@@ -73,14 +73,9 @@ pub fn spawn(
             }
             drop(table);
             tracing::info!(%session_id, "resume detected — permission/waiting cleared");
+            let icon = config.icon_for(State::Working);
             let (active, inactive) = config.colors_for(State::Working);
-            kitty::apply(
-                client.as_ref(),
-                &target,
-                &config.title_for(State::Working),
-                &active,
-                &inactive,
-            );
+            kitty::apply(client.as_ref(), &target, &icon, &active, &inactive);
             return;
         }
 
@@ -146,7 +141,11 @@ mod tests {
 
         let table = sessions.lock().await;
         assert_eq!(table.get("s1").unwrap().state, State::Working);
-        assert_eq!(fake.last_title(), Some(config.title_for(State::Working)));
+        let icon = config.icon_for(State::Working);
+        assert_eq!(
+            fake.last_title(),
+            Some(crate::icon::build_title(&icon.glyph, &icon.color, ""))
+        );
     }
 
     #[tokio::test(start_paused = true)]
