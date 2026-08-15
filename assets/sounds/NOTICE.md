@@ -7,7 +7,7 @@ the Apache License, Version 2.0. See `LICENSE-APACHE-herdr` in this
 directory for the full license text.
 
 Provenance (git blob SHA-1 of the upstream files, verified at time of
-copying — `git hash-object <file>` on the downloaded copy matched
+copying: `git hash-object <file>` on the downloaded copy matched
 exactly):
 
 | File          | Upstream path             | Blob SHA-1                                |

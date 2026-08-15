@@ -11,7 +11,7 @@ use crate::state::State;
 use super::session::SessionTable;
 
 /// Spawns a cancellable timer that fires `Done`/`Waiting` -> `Idle` at the
-/// exact configured duration — no polling, unlike the bash daemon's fixed
+/// exact configured duration, no polling, unlike the bash daemon's fixed
 /// 10s tick. Caller is responsible for aborting the previous timer (if any)
 /// before calling this again for the same session.
 pub fn spawn(

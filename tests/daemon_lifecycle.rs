@@ -1,6 +1,6 @@
 //! Integration test: spawns the real compiled daemon binary against an
 //! isolated $HOME (a tempdir), sends it a real message over its Unix
-//! socket, and confirms it processed it — without touching the developer's
+//! socket, and confirms it processed it, without touching the developer's
 //! actual ~/.config/kitty-claude-notifier or a real Kitty instance.
 use std::fs;
 use std::io::Write;
@@ -108,7 +108,7 @@ fn send_message(socket_path: &std::path::Path, msg: &str) {
 /// Regression test: config.toml used to be loaded exactly once at daemon
 /// startup, so an edit made after the daemon was already running had no
 /// effect until it was killed and respawned. server::run now reloads it
-/// fresh per message — this proves an edit takes effect on the very next
+/// fresh per message, proving an edit takes effect on the very next
 /// hook event, no restart required.
 #[test]
 fn daemon_reloads_config_without_restarting() {
@@ -149,12 +149,12 @@ fn daemon_reloads_config_without_restarting() {
         }),
         "first message never used the initial config's icon"
     );
-    // "#111111" as decimal RGB — the ANSI escape encodes color as
+    // "#111111" as decimal RGB: the ANSI escape encodes color as
     // decimal, not the literal hex string.
     let first_log = fs::read_to_string(&mock_log).unwrap();
     assert!(first_log.contains("38;2;17;17;17"));
 
-    // Edit config.toml while the daemon is still running — no restart.
+    // Edit config.toml while the daemon is still running, no restart.
     fs::write(
         &config_path,
         r##"

@@ -3,7 +3,7 @@
 # Any field left out here falls back to the built-in default.
 #
 # Top-level (non-table) keys must stay above the [icons]/[colors] table
-# headers below — TOML assigns any key after a [table] header to that
+# headers below. TOML assigns any key after a [table] header to that
 # table, not to the document root.
 
 # Seconds before done/waiting -> idle.
@@ -26,7 +26,7 @@ permission_markers = [
 # Nothing plays for a tab you're already looking at (its focused tab)
 # unless sound_play_when_focused is set. Built-in sounds require a
 # system audio player to be installed (paplay/pw-play/ffplay/mpg123/mpv
-# on Linux, afplay on macOS) — silently does nothing if none are found.
+# on Linux, afplay on macOS); silently does nothing if none are found.
 sound_enabled = false
 
 # Off by default. Set true to play the sound even for the tab you're
@@ -41,11 +41,11 @@ sound_play_when_focused = false
 
 # Per-state icon overrides: a glyph prepended to the tab's *existing*
 # title (whatever the shell already set it to), rendered in the given
-# color. Must be a plain Unicode symbol or Nerd Font glyph — emoji carry
+# color. Must be a plain Unicode symbol or Nerd Font glyph; emoji carry
 # their own embedded color and ignore the `color` setting entirely.
 #
 # Colors default to white rather than matching the tab-background color
-# below — an icon the same color as its own background disappears.
+# below: an icon the same color as its own background disappears.
 #
 # Add a `text` key to prepend the icon onto fixed text instead of the
 # tab's live title (the old per-state custom-title behavior, now

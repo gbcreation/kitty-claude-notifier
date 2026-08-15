@@ -8,7 +8,7 @@ use crate::state::State;
 
 /// A per-state color override: either a plain string (used for both the
 /// active and inactive tab background), or a table giving each one
-/// independently — e.g. `permission = "#ff003c"` vs.
+/// independently, e.g. `permission = "#ff003c"` vs.
 /// `permission = { active = "#ff003c", inactive = "#7a0020" }`.
 #[derive(Debug, Deserialize, PartialEq, Clone)]
 #[serde(untagged)]
@@ -34,21 +34,22 @@ impl ColorSpec {
 }
 
 /// A per-state icon override: the glyph prepended to the tab's title, and
-/// the color it's rendered in. Must be a plain (non-emoji) Unicode symbol
-/// or Nerd Font glyph — emoji ignore ANSI foreground color.
+/// the color it's rendered in. Should be a plain (non-emoji) Unicode
+/// symbol or Nerd Font glyph if `color` is to have any visible effect;
+/// emoji ignore ANSI foreground color.
 #[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct IconSpec {
     pub glyph: String,
     pub color: String,
     /// Fixed text to prepend the icon onto instead of the tab's live,
-    /// shell-set title — the old per-state custom-title behavior, now
+    /// shell-set title: the old per-state custom-title behavior, now
     /// combined with the icon rather than replaced by it. Omit to keep
     /// prepending onto whatever the tab's title naturally is.
     #[serde(default)]
     pub text: Option<String>,
 }
 
-/// Resolved icon for a state: glyph, color, and — if configured — fixed
+/// Resolved icon for a state: glyph, color, and, if configured, fixed
 /// text to use as the title's base instead of fetching it live.
 #[derive(Debug, PartialEq)]
 pub struct Icon {
@@ -57,7 +58,7 @@ pub struct Icon {
     pub text: Option<String>,
 }
 
-/// Custom sound file overrides — omit either to use the built-in default
+/// Custom sound file overrides. Omit either to use the built-in default
 /// (sourced from herdrdev/herdr, see assets/sounds/NOTICE.md).
 #[derive(Debug, Deserialize, PartialEq, Clone, Default)]
 #[serde(default)]
@@ -75,12 +76,12 @@ pub struct Config {
     pub icons: HashMap<String, IconSpec>,
     /// Per-state tab-background color overrides, same keys as `icons`.
     pub colors: HashMap<String, ColorSpec>,
-    /// Text markers that indicate a permission prompt is still on screen —
+    /// Text markers that indicate a permission prompt is still on screen,
     /// used by the resume-detection screen scrape (not yet wired up).
     pub permission_markers: Vec<String>,
-    /// Off by default — a bigger behavior change than a visual tweak.
+    /// Off by default: a bigger behavior change than a visual tweak.
     pub sound_enabled: bool,
-    /// Off by default — a sound normally doesn't play for a tab you're
+    /// Off by default. A sound normally doesn't play for a tab you're
     /// already looking at (its `is_focused` tab is true). Set true to
     /// play regardless of focus.
     pub sound_play_when_focused: bool,
@@ -127,7 +128,7 @@ impl Config {
         }
     }
 
-    /// Returns `(active_bg, inactive_bg)` for `state` — the built-in
+    /// Returns `(active_bg, inactive_bg)` for `state`. The built-in
     /// default uses the same color for both; a config override may split
     /// them via `ColorSpec::Different`.
     pub fn colors_for(&self, state: State) -> (String, String) {
@@ -271,7 +272,7 @@ mod tests {
     /// Regression test: a prior version of config/default.toml placed
     /// `permission_markers` after the `[colors]` table header, so TOML
     /// silently nested it *inside* `colors` instead of at the document
-    /// root — `colors: HashMap<String, ColorSpec>` then failed to parse
+    /// root. `colors: HashMap<String, ColorSpec>` then failed to parse
     /// the array as a color, and the daemon refused to start entirely.
     #[test]
     fn shipped_default_config_parses() {

@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use super::protocol::HookMessage;
 
 /// Sends one message to the daemon, spawning it first if nothing is
-/// listening yet. This is the "fast path" — no locking against concurrent
+/// listening yet. This is the "fast path": no locking against concurrent
 /// spawns yet (a known simplification; hardened in a later milestone).
 pub fn send(socket_path: &Path, msg: &HookMessage) -> Result<()> {
     let mut stream = connect_or_spawn_daemon(socket_path)?;

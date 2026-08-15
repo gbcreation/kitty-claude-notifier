@@ -16,7 +16,7 @@ use super::session::{Session, SessionTable};
 
 /// Applies one incoming message: updates the tab via `client`, and reflects
 /// the change in the in-memory session table (skipped if the message has no
-/// session_id — the tab update still happens, matching the bash tool's
+/// session_id; the tab update still happens, matching the bash tool's
 /// behavior of updating the tab unconditionally even without one).
 pub async fn apply(
     msg: HookMessage,
@@ -32,7 +32,7 @@ pub async fn apply(
             if let Some(session_id) = msg.session_id {
                 let mut table = sessions.lock().await;
                 // Any prior timers belong to a state this message
-                // supersedes — abort them so neither can fire late.
+                // supersedes, so abort them so neither can fire late.
                 let old_state = table
                     .remove(&session_id)
                     .inspect(abort_timers)
@@ -40,12 +40,12 @@ pub async fn apply(
 
                 if let Some(sound) = sound_for_transition(config.sound_enabled, old_state, state) {
                     // A tab you're already looking at doesn't need an
-                    // audio nudge too — unless sound_play_when_focused
+                    // audio nudge too, unless sound_play_when_focused
                     // opts back into it, in which case skip the focus
                     // check (and the fetch behind it) entirely.
                     // `apply()` above already fetched focus state unless
-                    // a `text` icon override skipped that call entirely —
-                    // in which case, fetch it now, failing open (assume
+                    // a `text` icon override skipped that call entirely.
+                    // In that case, fetch it now, failing open (assume
                     // unfocused) so a Kitty hiccup never silently
                     // swallows a real notification.
                     let should_play = config.sound_play_when_focused
@@ -116,7 +116,7 @@ fn abort_timers(session: &Session) {
 }
 
 /// Pure decision logic for which sound (if any) a state transition should
-/// play — no I/O, so it's directly testable without needing to observe
+/// play. No I/O, so it's directly testable without needing to observe
 /// real audio playback (which is a no-op in test builds regardless).
 /// Plays nothing if sound is disabled, or if this isn't a genuine
 /// transition (the new state matches the one already recorded).
@@ -341,7 +341,7 @@ mod tests {
     }
 
     /// When no icon `text` override is configured, `kitty::apply()` already
-    /// fetches focus while fetching the live title — the sound-suppression
+    /// fetches focus while fetching the live title. The sound-suppression
     /// check must reuse that instead of fetching it again.
     #[tokio::test]
     async fn sound_reuses_focus_apply_already_fetched() {
@@ -365,7 +365,7 @@ mod tests {
     }
 
     /// When a `text` override is configured for this state, `apply()` skips
-    /// fetching the live title entirely — and with it, focus state. The
+    /// fetching the live title entirely, and with it, focus state. The
     /// sound-suppression check must fall back to fetching focus on its own
     /// in that case rather than silently assuming a value.
     #[tokio::test]
@@ -405,7 +405,7 @@ mod tests {
 
     /// sound_play_when_focused=true must skip the focus check (and the
     /// fetch behind it) entirely, not just play through a `false` focus
-    /// result — the point is not to care about focus at all.
+    /// result. The point is not to care about focus at all.
     #[tokio::test]
     async fn sound_play_when_focused_skips_the_focus_fetch_entirely() {
         let sessions = Arc::new(Mutex::new(SessionTable::new()));
@@ -444,7 +444,7 @@ mod tests {
 
     /// No sound-eligible transition (sound disabled, or the state isn't
     /// Permission/Waiting/Done) must never trigger even the fallback focus
-    /// fetch — there's nothing to suppress.
+    /// fetch, since there's nothing to suppress.
     #[tokio::test]
     async fn no_focus_fetch_at_all_when_sound_disabled() {
         let sessions = Arc::new(Mutex::new(SessionTable::new()));

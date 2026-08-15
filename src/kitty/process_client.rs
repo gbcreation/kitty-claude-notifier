@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 use super::{KittyClient, TabInfo, WindowTarget};
 
-/// Real Kitty IPC — shells out to `kitten @`, always via the configured
+/// Real Kitty IPC: shells out to `kitten @`, always via the configured
 /// KITTY_LISTEN_ON socket when present rather than relying on the calling
 /// process having a controlling TTY (which hook subprocesses often lack).
 pub struct ProcessKittyClient;
@@ -72,7 +72,7 @@ impl KittyClient for ProcessKittyClient {
         // `kitten @ ls` returns each matched window's full environment
         // variables (including secrets) and other sensitive process
         // details alongside the title. Parse just enough to extract the
-        // title and focus state and drop the rest immediately — never log
+        // title and focus state and drop the rest immediately. Never log
         // `output` or the parsed value.
         let parsed: serde_json::Value =
             serde_json::from_slice(&output.stdout).context("failed to parse kitten @ ls output")?;

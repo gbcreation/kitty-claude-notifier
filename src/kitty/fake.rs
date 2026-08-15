@@ -13,7 +13,7 @@ pub enum Call {
     GetText(WindowTarget),
 }
 
-/// In-memory `KittyClient` for deterministic unit tests — records every
+/// In-memory `KittyClient` for deterministic unit tests. Records every
 /// call and returns scripted `get_text` responses, no subprocess involved.
 ///
 /// `tab_title` behaves like a real tab: `set_tab_title` updates it and
@@ -46,7 +46,7 @@ impl FakeKittyClient {
         self
     }
 
-    /// Seeds the tab's focus state — defaults to unfocused.
+    /// Seeds the tab's focus state, defaults to unfocused.
     pub fn with_focused(self, is_focused: bool) -> Self {
         *self.is_focused.lock().unwrap() = is_focused;
         self

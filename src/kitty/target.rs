@@ -2,7 +2,7 @@ use std::env;
 
 use serde::{Deserialize, Serialize};
 
-/// Which Kitty window/tab a command should target — mirrors the bash tool's
+/// Which Kitty window/tab a command should target: mirrors the bash tool's
 /// `--self`-when-available, `--match pid:$PPID`-otherwise fallback.
 ///
 /// Resolved on the hook side (where KITTY_WINDOW_ID/PPID are meaningful) and

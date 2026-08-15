@@ -169,12 +169,12 @@ pub fn uninstall() -> Result<()> {
             println!("Hooks removed from {}", path.display());
         } else {
             println!(
-                "No kitty-claude-notifier hooks found in {} — nothing to remove.",
+                "No kitty-claude-notifier hooks found in {}; nothing to remove.",
                 path.display()
             );
         }
     } else {
-        println!("{} not found — nothing to remove.", path.display());
+        println!("{} not found; nothing to remove.", path.display());
     }
 
     let installed_path = paths::installed_binary_path();
@@ -190,7 +190,7 @@ pub fn uninstall() -> Result<()> {
     Ok(())
 }
 
-/// Pure JSON transform — no file I/O — so it's directly unit-testable.
+/// Pure JSON transform, no file I/O, so it's directly unit-testable.
 /// Appends any of our hook entries not already present under `root.hooks`,
 /// creating `hooks` and each event's array as needed, without touching any
 /// existing entries (including another tool's). Returns how many were added.
@@ -243,7 +243,7 @@ fn merge_hooks(root: &mut Value, exe: &str) -> Result<usize> {
     Ok(added)
 }
 
-/// Pure JSON transform — no file I/O. Removes only command entries whose
+/// Pure JSON transform, no file I/O. Removes only command entries whose
 /// string contains `marker`, from every event's hook array, dropping any
 /// event key left with an empty array. Returns whether anything changed.
 fn remove_hooks(root: &mut Value, marker: &str) -> bool {

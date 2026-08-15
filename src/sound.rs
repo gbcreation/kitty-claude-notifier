@@ -1,11 +1,11 @@
 //! Notification sounds for state transitions that need your attention:
 //! entering Permission/Waiting ("needs your input") and Done ("a turn
 //! finished"). Plays via whichever system audio player happens to be
-//! installed — no audio library dependency, matching the rest of this
+//! installed, with no audio library dependency, matching the rest of this
 //! project's philosophy.
 //!
 //! The two built-in sounds are sourced from herdrdev/herdr (Apache
-//! License 2.0) — see `assets/sounds/NOTICE.md` for provenance and
+//! License 2.0); see `assets/sounds/NOTICE.md` for provenance and
 //! attribution.
 
 use std::io::Write;
@@ -19,7 +19,7 @@ static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sound {
-    /// Entered Permission or Waiting — needs your input.
+    /// Entered Permission or Waiting, needs your input.
     Request,
     /// Entered Done.
     Done,
@@ -28,7 +28,7 @@ pub enum Sound {
 /// Plays `sound` in a background thread (never blocks the caller). A
 /// custom file path, if given, is tried first and falls back to the
 /// built-in default on failure. Never actually attempts playback when
-/// compiled for `cargo test` — this must stay a `cfg!(test)` check, not a
+/// compiled for `cargo test`. This must stay a `cfg!(test)` check, not a
 /// runtime toggle, so no test run can ever spawn a real audio process
 /// regardless of config.
 pub fn play(sound: Sound, custom_path: Option<PathBuf>) {

@@ -12,7 +12,7 @@ use crate::config::Icon;
 use crate::icon;
 
 /// A tab's current title and whether it's the one the user is actually
-/// looking at (the active tab of the currently-focused OS window — not
+/// looking at (the active tab of the currently-focused OS window, not
 /// just "active within its own OS window", which `kitten @ ls` reports
 /// separately as `is_active`).
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -27,7 +27,7 @@ pub struct TabInfo {
 pub trait KittyClient {
     fn set_tab_title(&self, target: &WindowTarget, title: &str) -> Result<()>;
     /// Sets both the focused (`active_bg`) and unfocused (`inactive_bg`)
-    /// tab background — Kitty only honors `active_bg` while the tab is
+    /// tab background. Kitty only honors `active_bg` while the tab is
     /// focused, so a background tab needs its own color set explicitly to
     /// show anything at all.
     fn set_tab_color(
@@ -42,14 +42,14 @@ pub trait KittyClient {
     ///
     /// Implementations backed by `kitten @ ls` receive a JSON blob that
     /// includes each window's full environment variables and other
-    /// sensitive data — extract only `title`/`is_focused` and never log or
+    /// sensitive data. Extract only `title`/`is_focused` and never log or
     /// retain the rest of that response.
     fn get_tab_info(&self, target: &WindowTarget) -> Result<TabInfo>;
     fn get_text(&self, target: &WindowTarget) -> Result<String>;
 }
 
 /// Prepends `icon`'s glyph (in its color) onto the tab's title and sets
-/// the tab background, logging (not propagating) any failure — a Kitty
+/// the tab background, logging (not propagating) any failure. A Kitty
 /// hiccup should never be fatal to the daemon.
 ///
 /// The base the icon prepends onto is `icon.text` if the config set one
@@ -57,7 +57,7 @@ pub trait KittyClient {
 /// `get_tab_info`, so a fixed `text` override skips that call entirely).
 ///
 /// Returns the tab's focus state if it happened to be fetched (i.e. no
-/// `text` override) — `None` means the caller must fetch it separately if
+/// `text` override). `None` means the caller must fetch it separately if
 /// it needs to know.
 pub fn apply(
     client: &dyn KittyClient,
@@ -152,8 +152,8 @@ mod tests {
 
     #[test]
     fn with_text_override_skips_fetching_the_live_title_and_focus() {
-        // A live title is seeded but must be ignored entirely — and never
-        // even fetched — when a fixed text override is configured.
+        // A live title is seeded but must be ignored entirely, and never
+        // even fetched, when a fixed text override is configured.
         let fake = FakeKittyClient::new(vec![])
             .with_initial_title("my project")
             .with_focused(true);

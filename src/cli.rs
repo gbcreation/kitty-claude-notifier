@@ -30,6 +30,6 @@ pub enum Commands {
     Install,
     /// Remove this tool's hooks from ~/.claude/settings.json.
     Uninstall,
-    /// Flash a tab title/color directly, with no daemon involved — a smoke test.
+    /// Flash a tab title/color directly, with no daemon involved: a smoke test.
     Test,
 }

@@ -17,14 +17,14 @@ use super::session::SessionTable;
 /// the config), stop polling rather than spin forever.
 const MAX_WAIT: Duration = Duration::from_secs(600);
 
-/// Consecutive clear polls required before committing the transition —
-/// guards against a burst of permission prompts (approve one, immediately
+/// Consecutive clear polls required before committing the transition.
+/// Guards against a burst of permission prompts (approve one, immediately
 /// hit another) being misread as full resolution from a single clear tick.
 const CONFIRMATIONS_REQUIRED: u32 = 2;
 
 /// Polls `kitten @ get-text` for `target` while a session sits in
-/// permission/waiting, watching for the configured markers to disappear —
-/// the reactive replacement for the bash tool's transcript-mtime heuristic.
+/// permission/waiting, watching for the configured markers to disappear.
+/// The reactive replacement for the bash tool's transcript-mtime heuristic.
 pub fn spawn(
     session_id: String,
     target: WindowTarget,
@@ -72,7 +72,7 @@ pub fn spawn(
                 session.resume_watch = None;
             }
             drop(table);
-            tracing::info!(%session_id, "resume detected — permission/waiting cleared");
+            tracing::info!(%session_id, "resume detected: permission/waiting cleared");
             let icon = config.icon_for(State::Working);
             let (active, inactive) = config.colors_for(State::Working);
             kitty::apply(client.as_ref(), &target, &icon, &active, &inactive);
@@ -153,7 +153,7 @@ mod tests {
         let config = config_with_interval(100);
         let target = WindowTarget::Id("1".to_string());
         // clear, present, clear, clear: must NOT resolve after the first
-        // clear+present pair — only after two FRESH consecutive clears.
+        // clear+present pair, only after two FRESH consecutive clears.
         let fake = Arc::new(FakeKittyClient::new(vec![
             "cleared",
             "do you want to proceed?",

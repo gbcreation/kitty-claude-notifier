@@ -1,10 +1,11 @@
 //! Builds/strips the colored icon prefix prepended to a tab's existing
 //! title. Kitty's tab bar renders raw ANSI truecolor escape codes embedded
-//! directly in a title string (verified against a real Kitty instance —
-//! this isn't documented behavior to rely on blindly). Emoji are NOT
-//! usable here: they carry their own embedded color glyph (COLR/emoji
-//! font tables) and ignore SGR foreground color entirely, so icons must
-//! be plain Unicode symbols or Nerd Font glyphs, not emoji.
+//! directly in a title string (verified against a real Kitty instance;
+//! this isn't documented behavior to rely on blindly). `glyph` is treated
+//! as an opaque string, so emoji work here too, but they carry their own
+//! embedded color glyph (COLR/emoji font tables) and ignore SGR foreground
+//! color entirely. For the `color` setting to have any visible effect,
+//! icons should be plain Unicode symbols or Nerd Font glyphs, not emoji.
 
 const PREFIX_START: &str = "\x1b[38;2;";
 const RESET: &str = "\x1b[39m";

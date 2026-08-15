@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Install => kitty_claude_notifier::install::install()?,
         Commands::Uninstall => kitty_claude_notifier::install::uninstall()?,
         Commands::Test => {
-            // kitty::apply/clear only log (never return errors) — without
+            // kitty::apply/clear only log (never return errors), so without
             // a subscriber those warnings would be silently dropped,
             // defeating the point of a diagnostic command.
             tracing_subscriber::fmt()

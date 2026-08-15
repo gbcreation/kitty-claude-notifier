@@ -1,6 +1,6 @@
 //! Integration test: ProcessKittyClient against a mock `kitten` binary on
 //! PATH, mirroring the bash test suite's own approach. Deliberately a
-//! single test function — it mutates process-global env vars (PATH,
+//! single test function, since it mutates process-global env vars (PATH,
 //! KITTY_LISTEN_ON), which Rust's default parallel test runner would
 //! otherwise race across tests in this same binary.
 use std::fs;

@@ -15,7 +15,7 @@ use super::transitions;
 
 /// Accepts connections forever, one lightweight task per hook invocation
 /// (each connects, sends one line, and disconnects). Config is reloaded
-/// fresh from disk for every message — editing config.toml takes effect
+/// fresh from disk for every message, so editing config.toml takes effect
 /// on the very next hook event, no daemon restart needed.
 pub async fn run(
     listener: UnixListener,

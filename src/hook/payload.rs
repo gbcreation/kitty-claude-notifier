@@ -1,8 +1,8 @@
 use serde::Deserialize;
 
 /// The subset of Claude Code's hook JSON we currently care about. Fields are
-/// optional and unknown ones are ignored — hook payloads vary by event type
-/// and we never want a shape mismatch to break tab updates.
+/// optional and unknown ones are ignored, since hook payloads vary by event
+/// type and we never want a shape mismatch to break tab updates.
 #[derive(Debug, Deserialize, Default)]
 pub struct HookPayload {
     pub session_id: Option<String>,

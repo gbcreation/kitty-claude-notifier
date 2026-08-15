@@ -14,7 +14,7 @@ use tokio::net::UnixListener;
 use crate::kitty::{KittyClient, ProcessKittyClient};
 use crate::paths;
 
-/// Entry point for the `daemon` subcommand — builds a small tokio runtime
+/// Entry point for the `daemon` subcommand. Builds a small tokio runtime
 /// just for this (other subcommands stay synchronous) and runs forever.
 /// Takes `config_path` rather than a pre-loaded `Config`: the config is
 /// reloaded fresh from disk for every message (see `server::run`), so an
@@ -46,7 +46,7 @@ fn init_logging() -> Result<()> {
 async fn async_run(socket_path: &Path, config_path: PathBuf) -> Result<()> {
     // Held for the rest of this function's lifetime (the daemon's entire
     // run), and released automatically by the kernel if this process dies
-    // for any reason — no stale-PID/lock-age guessing needed.
+    // for any reason, so no stale-PID/lock-age guessing is needed.
     let lock_path = paths::daemon_lock_path();
     if let Some(parent) = lock_path.parent() {
         fs::create_dir_all(parent)?;

@@ -17,7 +17,7 @@ pub enum State {
 }
 
 impl State {
-    /// Default icon glyph prepended to the tab's existing title — a plain
+    /// Default icon glyph prepended to the tab's existing title: a plain
     /// (non-emoji) Unicode symbol, since emoji ignore ANSI foreground color.
     pub fn default_icon_glyph(&self) -> &'static str {
         match self {
@@ -30,7 +30,7 @@ impl State {
         }
     }
 
-    /// Default icon color (hex) — deliberately neutral/white rather than
+    /// Default icon color (hex), deliberately neutral/white rather than
     /// matching `default_color()`'s hue: the tab background is often the
     /// *same* saturated color, and a same-colored icon disappears into it.
     pub fn default_icon_color(&self) -> &'static str {
