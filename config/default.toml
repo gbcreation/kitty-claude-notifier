@@ -29,6 +29,13 @@ permission_markers = [
 # on Linux, afplay on macOS); silently does nothing if none are found.
 sound_enabled = false
 
+# Which states play a sound when entered, on top of sound_enabled above.
+# Defaults to all three states that have an associated sound; listing a
+# state without one (working/idle/error) has no effect. Restrict to just
+# one or two, e.g. sound_events = ["done"] to only hear about turns
+# finishing, not permission/waiting prompts.
+# sound_events = ["permission", "waiting", "done"]
+
 # Off by default. Set true to play the sound even for the tab you're
 # currently focused on (normally suppressed).
 sound_play_when_focused = false

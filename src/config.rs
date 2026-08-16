@@ -81,6 +81,12 @@ pub struct Config {
     pub permission_markers: Vec<String>,
     /// Off by default: a bigger behavior change than a visual tweak.
     pub sound_enabled: bool,
+    /// Which states play a sound when entered, on top of `sound_enabled`.
+    /// Defaults to all three states that have an associated sound
+    /// (`Permission`/`Waiting` play the request sound, `Done` plays the
+    /// done sound); listing a state without one (`working`/`idle`/`error`)
+    /// has no effect. Lets you opt into, say, only `done`.
+    pub sound_events: Vec<State>,
     /// Off by default. A sound normally doesn't play for a tab you're
     /// already looking at (its `is_focused` tab is true). Set true to
     /// play regardless of focus.
@@ -97,6 +103,7 @@ impl Default for Config {
             colors: HashMap::new(),
             permission_markers: default_permission_markers(),
             sound_enabled: false,
+            sound_events: default_sound_events(),
             sound_play_when_focused: false,
             sounds: SoundPaths::default(),
         }
@@ -147,6 +154,10 @@ fn default_permission_markers() -> Vec<String> {
         "do you want to proceed?".to_string(),
         "❯ 1. yes".to_string(),
     ]
+}
+
+fn default_sound_events() -> Vec<State> {
+    vec![State::Permission, State::Waiting, State::Done]
 }
 
 #[cfg(test)]
@@ -216,6 +227,14 @@ mod tests {
     }
 
     #[test]
+    fn sound_events_defaults_to_all_three_sound_eligible_states() {
+        assert_eq!(
+            Config::default().sound_events,
+            vec![State::Permission, State::Waiting, State::Done]
+        );
+    }
+
+    #[test]
     fn sound_config_parses() {
         let raw = r##"
             sound_enabled = true
@@ -232,6 +251,16 @@ mod tests {
             Some("/tmp/custom-request.mp3")
         );
         assert_eq!(cfg.sounds.done, None);
+    }
+
+    #[test]
+    fn sound_events_can_be_restricted_to_a_subset() {
+        let raw = r##"
+            sound_enabled = true
+            sound_events = ["done"]
+        "##;
+        let cfg: Config = toml::from_str(raw).unwrap();
+        assert_eq!(cfg.sound_events, vec![State::Done]);
     }
 
     #[test]

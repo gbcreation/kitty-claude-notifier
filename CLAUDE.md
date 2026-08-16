@@ -123,8 +123,9 @@ daemon (long-running, tokio)
         and/or resume_watch (Permission only) for the new state. A
         repeat of the same state leaves existing timers untouched
         instead (see Known limitations)
-      - if config.sound_enabled and this is a genuine transition, and
-        (the tab isn't currently focused OR config.sound_play_when_focused),
+      - if config.sound_enabled, the new state is listed in
+        config.sound_events, this is a genuine transition, and (the tab
+        isn't currently focused OR config.sound_play_when_focused),
         plays a sound in a background thread for Permission/Waiting
         (request) or Done (done); see transitions::sound_for_transition.
         Reuses kitty::apply()'s focus result if it fetched one; falls
@@ -244,13 +245,16 @@ else" after that.
 
 - Off by default (`sound_enabled = false`), a bigger behavior change
   than a visual tweak, so it's opt-in.
-- `transitions::sound_for_transition(sound_enabled, old_state, new_state)`
+- `transitions::sound_for_transition(sound_enabled, sound_events, old_state, new_state)`
   is pure decision logic (no I/O): `Permission`/`Waiting` → `Sound::Request`,
   `Done` → `Sound::Done`, everything else → `None`. Also returns `None`
-  when `new_state == old_state`, since a repeated/duplicate hook firing
-  for a state the session is already in must not replay the sound. This
-  function does *not* know about focus; that's a separate guard at the
-  call site (below), kept out of this pure function since it needs I/O.
+  when `new_state == old_state` (a repeated/duplicate hook firing for a
+  state the session is already in must not replay the sound), or when
+  `new_state` isn't in `sound_events` (defaults to all three
+  sound-eligible states; a user can restrict to a subset, e.g. only
+  `Done`). This function does *not* know about focus; that's a separate
+  guard at the call site (below), kept out of this pure function since
+  it needs I/O.
 - **Focus suppression**: a tab you're already looking at doesn't need an
   audio nudge too. `kitty::apply()` already fetches `TabInfo.is_focused`
   while fetching the live title (unless a `text` override skips that

@@ -33,7 +33,12 @@ pub async fn apply(
                 let mut table = sessions.lock().await;
                 let old_state = table.get(&session_id).map(|s| s.state);
 
-                if let Some(sound) = sound_for_transition(config.sound_enabled, old_state, state) {
+                if let Some(sound) = sound_for_transition(
+                    config.sound_enabled,
+                    &config.sound_events,
+                    old_state,
+                    state,
+                ) {
                     // A tab you're already looking at doesn't need an
                     // audio nudge too, unless sound_play_when_focused
                     // opts back into it, in which case skip the focus
@@ -141,14 +146,16 @@ fn abort_timers(session: &Session) {
 /// Pure decision logic for which sound (if any) a state transition should
 /// play. No I/O, so it's directly testable without needing to observe
 /// real audio playback (which is a no-op in test builds regardless).
-/// Plays nothing if sound is disabled, or if this isn't a genuine
-/// transition (the new state matches the one already recorded).
+/// Plays nothing if sound is disabled, if `new_state` isn't in
+/// `sound_events`, or if this isn't a genuine transition (the new state
+/// matches the one already recorded).
 fn sound_for_transition(
     sound_enabled: bool,
+    sound_events: &[State],
     old_state: Option<State>,
     new_state: State,
 ) -> Option<Sound> {
-    if !sound_enabled || old_state == Some(new_state) {
+    if !sound_enabled || old_state == Some(new_state) || !sound_events.contains(&new_state) {
         return None;
     }
     match new_state {
@@ -162,11 +169,18 @@ fn sound_for_transition(
 mod sound_tests {
     use super::*;
 
+    fn all_events() -> Vec<State> {
+        vec![State::Permission, State::Waiting, State::Done]
+    }
+
     #[test]
     fn disabled_plays_nothing_regardless_of_transition() {
-        assert_eq!(sound_for_transition(false, None, State::Permission), None);
         assert_eq!(
-            sound_for_transition(false, Some(State::Idle), State::Done),
+            sound_for_transition(false, &all_events(), None, State::Permission),
+            None
+        );
+        assert_eq!(
+            sound_for_transition(false, &all_events(), Some(State::Idle), State::Done),
             None
         );
     }
@@ -174,11 +188,11 @@ mod sound_tests {
     #[test]
     fn permission_and_waiting_play_request() {
         assert_eq!(
-            sound_for_transition(true, None, State::Permission),
+            sound_for_transition(true, &all_events(), None, State::Permission),
             Some(Sound::Request)
         );
         assert_eq!(
-            sound_for_transition(true, Some(State::Working), State::Waiting),
+            sound_for_transition(true, &all_events(), Some(State::Working), State::Waiting),
             Some(Sound::Request)
         );
     }
@@ -186,28 +200,60 @@ mod sound_tests {
     #[test]
     fn done_plays_done() {
         assert_eq!(
-            sound_for_transition(true, Some(State::Working), State::Done),
+            sound_for_transition(true, &all_events(), Some(State::Working), State::Done),
             Some(Sound::Done)
         );
     }
 
     #[test]
     fn working_idle_error_play_nothing() {
-        assert_eq!(sound_for_transition(true, None, State::Working), None);
-        assert_eq!(sound_for_transition(true, None, State::Idle), None);
-        assert_eq!(sound_for_transition(true, None, State::Error), None);
+        assert_eq!(
+            sound_for_transition(true, &all_events(), None, State::Working),
+            None
+        );
+        assert_eq!(
+            sound_for_transition(true, &all_events(), None, State::Idle),
+            None
+        );
+        assert_eq!(
+            sound_for_transition(true, &all_events(), None, State::Error),
+            None
+        );
     }
 
     #[test]
     fn repeating_the_same_state_plays_nothing() {
         // Guards against duplicate hook firings re-triggering the sound.
         assert_eq!(
-            sound_for_transition(true, Some(State::Permission), State::Permission),
+            sound_for_transition(
+                true,
+                &all_events(),
+                Some(State::Permission),
+                State::Permission
+            ),
             None
         );
         assert_eq!(
-            sound_for_transition(true, Some(State::Done), State::Done),
+            sound_for_transition(true, &all_events(), Some(State::Done), State::Done),
             None
+        );
+    }
+
+    #[test]
+    fn state_not_in_sound_events_plays_nothing() {
+        // A user who only wants a sound for Done can list just that.
+        let events = vec![State::Done];
+        assert_eq!(
+            sound_for_transition(true, &events, None, State::Permission),
+            None
+        );
+        assert_eq!(
+            sound_for_transition(true, &events, Some(State::Working), State::Waiting),
+            None
+        );
+        assert_eq!(
+            sound_for_transition(true, &events, Some(State::Working), State::Done),
+            Some(Sound::Done)
         );
     }
 }
