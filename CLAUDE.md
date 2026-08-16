@@ -2,10 +2,11 @@
 
 Reactive Kitty tab indicators for Claude Code, in Rust. See `README.md`
 for the "why." In short, a background daemon reads a tab's actual
-rendered screen content to detect when a permission/waiting prompt has
-been resolved, since Claude Code has no hook event for that specific
-transition. It also prepends a small colored icon onto a tab's existing
-title rather than replacing it outright.
+rendered screen content to detect when a permission prompt has been
+resolved, since Claude Code fires no hook for that specific transition
+(it's a menu selection, not a submitted message). It also prepends a
+small colored icon onto a tab's existing title rather than replacing it
+outright.
 
 ## Build, Install, Test
 
@@ -116,24 +117,25 @@ daemon (long-running, tokio)
         never fatal, failures are logged. Returns the tab's focus
         state if get_tab_info happened to be called (None if the `text`
         override skipped it)
-      - retires any timers the superseded state armed
-      - arms idle_timer (Done/Waiting) and/or resume_watch
-        (Permission/Waiting) for the new state
-      - if config.sound_enabled and this is a genuine transition (not a
-        repeat of the same state), and (the tab isn't currently focused
-        OR config.sound_play_when_focused), plays a sound in a background
-        thread for Permission/Waiting (request) or Done (done); see
-        transitions::sound_for_transition. Reuses kitty::apply()'s focus
-        result if it fetched one; falls back to its own get_tab_info call
-        otherwise (only when a `text` override was configured for this
-        state, and only when sound_play_when_focused is false, since
-        there's no need to know the actual focus state if it won't be
-        checked)
+      - if this is a genuine transition (the new state differs from the
+        one already recorded for this session), retires any timers the
+        superseded state armed, then arms idle_timer (Done/Waiting)
+        and/or resume_watch (Permission only) for the new state. A
+        repeat of the same state leaves existing timers untouched
+        instead (see Known limitations)
+      - if config.sound_enabled and this is a genuine transition, and
+        (the tab isn't currently focused OR config.sound_play_when_focused),
+        plays a sound in a background thread for Permission/Waiting
+        (request) or Done (done); see transitions::sound_for_transition.
+        Reuses kitty::apply()'s focus result if it fetched one; falls
+        back to its own get_tab_info call otherwise (only when a `text`
+        override was configured for this state, and only when
+        sound_play_when_focused is false, since there's no need to know
+        the actual focus state if it won't be checked)
   → idle_timer fires exact-timing -> Idle after config.idle_timeout_secs
-  → resume_watch polls get-text every config.resume_poll_interval_ms,
-    flips -> Working after 2 consecutive polls without any configured
-    permission_markers present
-  → whichever of the two fires first aborts the other
+  → resume_watch (Permission only) polls get-text every
+    config.resume_poll_interval_ms, flips -> Working after 2 consecutive
+    polls without any configured permission_markers present
   → Cleanup (session-end): kitty::clear() strips the icon back off
     (restoring the tab's natural title) and clears the tab color
 ```
@@ -147,7 +149,7 @@ without any wired hook trigger are intentionally omitted from this model.
 |-------|--------------|------|
 | `working` | `UserPromptSubmit`; Notification `elicitation_response` | superseded by the next hook message |
 | `permission` | Notification `permission_prompt` | `resume_watch`: markers cleared for 2 consecutive polls |
-| `waiting` | Notification `idle_prompt`/`elicitation_dialog` | `resume_watch` (as above) **or** `idle_timer`, whichever fires first |
+| `waiting` | Notification `idle_prompt`/`elicitation_dialog` | `idle_timer`: exact `idle_timeout_secs` after entry, or superseded by the next hook message (typically `UserPromptSubmit` once you reply) |
 | `done` | `Stop` | `idle_timer`: exact `idle_timeout_secs` after entry |
 | `idle` | daemon-internal (`idle_timer` firing) | superseded by the next hook message |
 | `error` | `StopFailure` | superseded by the next hook message |
@@ -164,6 +166,42 @@ noise, and (before `Error` had any exit condition) could leave a tab
 stuck on "error" long after Claude had already moved on. `StopFailure`
 (the whole turn ending in failure) is kept; nothing "tries something
 else" after that.
+
+## Known limitations
+
+- **`resume_watch` (screen-scraping) is armed only for `Permission`, not
+  `Waiting`.** A `Permission` dialog is answered via a menu selection
+  (arrow keys + enter), which fires no hook at all on resolution, so
+  screen-scraping against `permission_markers` is the only signal
+  available. `Waiting` is different: a real reply is typed and
+  submitted, which already fires `UserPromptSubmit`, already mapped to
+  `working`, so it resolves correctly through hooks alone. An earlier
+  version of this daemon armed `resume_watch` for `Waiting` too, reusing
+  the same `permission_markers` list, but that's wrong: the thing on
+  screen while `Waiting` is just Claude Code's ordinary input box, and
+  its content (an optional AI-suggested reply) varies every time, so
+  there's no fixed wording to watch for disappearing. Confirmed live: it
+  was self-clearing back to `working` within about one second of
+  entering `Waiting`, incorrectly, since the marker list never matched
+  that box's arbitrary content. Do not re-add `resume_watch` for
+  `Waiting` without a fundamentally different (non-marker-based) way to
+  detect resolution.
+- **A repeated `SetState` into the same state a session is already in
+  leaves its timers untouched**, rather than aborting and re-arming them.
+  This matters because Claude Code appears to re-fire `idle_prompt`
+  periodically while `Waiting` (observed roughly every 60 seconds in a
+  live session's `daemon.log`). If every repeat reset `idle_timer`'s
+  300-second countdown from zero, a session could stay stuck on
+  `waiting` forever, as long as the nudges kept arriving faster than the
+  timeout. See `transitions::apply`'s `old_state == Some(state)` early
+  return.
+- **Split panes sharing one Kitty tab**: `set_tab_title`/`set_tab_color`
+  operate on the whole tab, not an individual pane. If two Claude Code
+  sessions run in two panes of the same tab (Kitty's split layout), they
+  share one title and one background color slot, so whichever session's
+  hook fires most recently overwrites the other's icon. There's no way
+  to show two independent indicators for sessions sharing a tab; Kitty
+  has no per-pane title in its tab bar to target instead.
 
 ## Icon prepending
 
