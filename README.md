@@ -163,14 +163,16 @@ stuck showing "permission needed" until the next unrelated hook happens to
 fire and reset it, which could be a long time.
 
 This tool closes that gap directly: while a session sits in
-`permission`/`waiting`, a background daemon polls the tab's actual
-rendered screen content (`kitten @ get-text`) and watches for the prompt
-text to disappear. The moment it does, the tab flips back to `working`,
+`permission`, a background daemon polls the tab's actual rendered
+screen content (`kitten @ get-text`) and watches for the prompt text to
+disappear. The moment it does, the tab flips back to `working`,
 typically within one poll interval (500ms by default) rather than
-whenever the next hook happens to arrive. Every other state transition
-still comes straight from Claude Code's hooks, which are already fast
-and precise; this only replaces the one mechanism that couldn't be
-hook-driven.
+whenever the next hook happens to arrive. Every other state transition,
+including `waiting`'s resolution once you actually reply, still comes
+straight from Claude Code's hooks, which are already fast and precise;
+this only replaces the one mechanism that couldn't be hook-driven (a
+permission dialog is answered via a menu selection, which fires no hook
+at all).
 
 Rather than overwriting a tab's title outright, it prepends a small
 colored icon onto whatever the title already is, so your shell's own
@@ -199,9 +201,13 @@ daemon (long-running, tokio)
       - sets the tab background color
   → per-session cancellable timers:
       - idle_timer: exact-timing done/waiting -> idle
-      - resume_watch: polls get-text while permission/waiting, flips
-        to working once the configured markers disappear for two
-        consecutive polls (debounced against burst prompts)
+      - resume_watch: polls get-text while permission (a menu-selection
+        dialog Claude Code fires no hook for on resolution), flips to
+        working once the configured markers disappear for two
+        consecutive polls (debounced against burst prompts). waiting
+        resolves through a real hook instead (typically UserPromptSubmit
+        once you reply), since its on-screen content varies too much
+        for marker-matching to work reliably
   → plays a sound (if sound_enabled and the tab isn't currently
     focused) on entering permission/waiting or done, in a background
     thread, via whichever system audio player happens to be installed

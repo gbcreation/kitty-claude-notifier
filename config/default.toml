@@ -10,7 +10,7 @@
 idle_timeout_secs = 300
 
 # How often the resume-detection screen-scrape polls `kitten @ get-text`
-# while a session is stuck in permission/waiting (milliseconds).
+# while a session is stuck in permission (milliseconds).
 resume_poll_interval_ms = 500
 
 # Text markers (case-insensitive substring match) that indicate a

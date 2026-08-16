@@ -31,12 +31,7 @@ pub async fn apply(
             let is_focused = kitty::apply(client.as_ref(), &msg.target, &icon, &active, &inactive);
             if let Some(session_id) = msg.session_id {
                 let mut table = sessions.lock().await;
-                // Any prior timers belong to a state this message
-                // supersedes, so abort them so neither can fire late.
-                let old_state = table
-                    .remove(&session_id)
-                    .inspect(abort_timers)
-                    .map(|s| s.state);
+                let old_state = table.get(&session_id).map(|s| s.state);
 
                 if let Some(sound) = sound_for_transition(config.sound_enabled, old_state, state) {
                     // A tab you're already looking at doesn't need an
@@ -64,6 +59,25 @@ pub async fn apply(
                     }
                 }
 
+                if old_state == Some(state) {
+                    // A repeat of the state the session is already in
+                    // (e.g. Claude Code re-firing idle_prompt as a
+                    // periodic nudge while Waiting). Leave the existing
+                    // idle_timer/resume_watch running untouched: resetting
+                    // them here would let a fast-enough repeat cadence
+                    // perpetually postpone idle_timer, keeping the tab
+                    // stuck instead of ever reaching Idle.
+                    tracing::info!(%session_id, ?state, "session state repeated, timers untouched");
+                    return;
+                }
+
+                // A genuine transition: any prior timers belong to a
+                // state this message supersedes, so abort them so neither
+                // can fire late.
+                if let Some(old) = table.remove(&session_id) {
+                    abort_timers(&old);
+                }
+
                 let idle_timer = matches!(state, State::Done | State::Waiting).then(|| {
                     idle_timer::spawn(
                         session_id.clone(),
@@ -74,7 +88,16 @@ pub async fn apply(
                         config.clone(),
                     )
                 });
-                let resume_watch = matches!(state, State::Permission | State::Waiting).then(|| {
+                // Permission dialogs are answered via a menu selection
+                // (arrow keys + enter), which fires no hook at all, so
+                // screen-scraping is the only way to detect resolution.
+                // Waiting is different: a typed reply fires a real
+                // UserPromptSubmit hook, already mapped to Working, so it
+                // resolves correctly without screen-scraping; watching for
+                // Claude Code's own wording here was unreliable, since the
+                // "waiting for input" box's content varies every time (see
+                // CLAUDE.md's Known limitations section).
+                let resume_watch = matches!(state, State::Permission).then(|| {
                     resume_watch::spawn(
                         session_id.clone(),
                         msg.target.clone(),
@@ -237,7 +260,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn waiting_arms_both_timers() {
+    async fn waiting_arms_idle_timer_but_not_resume_watch() {
+        // Waiting resolves via a real UserPromptSubmit hook once you
+        // reply, or idle_timer if you don't; resume_watch's marker
+        // matching only makes sense for Permission (see CLAUDE.md's
+        // Known limitations section).
         let (sessions, fake, config) = harness();
         let client = as_trait_object(&fake);
         apply(
@@ -250,7 +277,7 @@ mod tests {
 
         let table = sessions.lock().await;
         let session = table.get("s1").unwrap();
-        assert!(session.resume_watch.is_some());
+        assert!(session.resume_watch.is_none());
         assert!(session.idle_timer.is_some());
     }
 
@@ -273,7 +300,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fresh_message_aborts_previous_session_timers() {
+    async fn fresh_message_aborts_previous_idle_timer() {
         let (sessions, fake, config) = harness();
         let client = as_trait_object(&fake);
         apply(
@@ -284,18 +311,20 @@ mod tests {
         )
         .await;
 
-        let (old_idle, old_resume) = {
+        let old_idle = {
             let table = sessions.lock().await;
-            let session = table.get("s1").unwrap();
-            (
-                session.idle_timer.as_ref().unwrap().abort_handle(),
-                session.resume_watch.as_ref().unwrap().abort_handle(),
-            )
+            table
+                .get("s1")
+                .unwrap()
+                .idle_timer
+                .as_ref()
+                .unwrap()
+                .abort_handle()
         };
         assert!(!old_idle.is_finished());
-        assert!(!old_resume.is_finished());
 
-        // A fresh message for the same session should retire both.
+        // A genuine transition (different state) for the same session
+        // should retire the superseded timer.
         apply(
             set_state_msg("s1", State::Done),
             &sessions,
@@ -304,10 +333,87 @@ mod tests {
         )
         .await;
 
-        // Give the aborted tasks a moment to actually stop.
+        // Give the aborted task a moment to actually stop.
         tokio::task::yield_now().await;
         assert!(old_idle.is_finished());
+    }
+
+    #[tokio::test]
+    async fn fresh_message_aborts_previous_resume_watch() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Permission),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let old_resume = {
+            let table = sessions.lock().await;
+            table
+                .get("s1")
+                .unwrap()
+                .resume_watch
+                .as_ref()
+                .unwrap()
+                .abort_handle()
+        };
+        assert!(!old_resume.is_finished());
+
+        apply(
+            set_state_msg("s1", State::Working),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        tokio::task::yield_now().await;
         assert!(old_resume.is_finished());
+    }
+
+    #[tokio::test]
+    async fn repeated_same_state_message_leaves_idle_timer_untouched() {
+        // Regression: Claude Code appears to re-fire idle_prompt
+        // periodically while Waiting. If a repeat reset idle_timer's
+        // countdown, a session could stay stuck on Waiting forever as
+        // long as the nudges arrived faster than the timeout.
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Waiting),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let original_idle = {
+            let table = sessions.lock().await;
+            table
+                .get("s1")
+                .unwrap()
+                .idle_timer
+                .as_ref()
+                .unwrap()
+                .abort_handle()
+        };
+
+        apply(
+            set_state_msg("s1", State::Waiting),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        tokio::task::yield_now().await;
+        assert!(
+            !original_idle.is_finished(),
+            "repeated message must not abort/replace the existing idle_timer"
+        );
     }
 
     #[tokio::test]
