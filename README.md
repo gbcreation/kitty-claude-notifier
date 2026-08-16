@@ -110,6 +110,9 @@ color = "#ffffff"
 
 sound_enabled = false            # off by default; plays a sound on
                                   # entering permission/waiting and on done
+# sound_events = ["permission", "waiting", "done"]  # which states play a
+                                  # sound; restrict to e.g. ["done"] to
+                                  # only hear about finished turns
 sound_play_when_focused = false  # off by default; suppresses the sound
                                   # for the tab you're already looking at
 # [sounds]                       # optional custom sound file paths;
@@ -138,10 +141,12 @@ detection stops firing, update `permission_markers`; no rebuild needed.
 
 Off by default. When `sound_enabled = true`, a sound plays on entering
 `permission`/`waiting` (needs your input) and on `done` (a turn
-finished). Nothing plays for repeated/no-op transitions into the same
-state, and nothing plays if the tab is currently focused (you're already
-looking at it) unless `sound_play_when_focused = true`. Playback runs in
-a background thread and never blocks or fails the state update itself.
+finished), the states listed in `sound_events` (all three by default;
+restrict it to hear about only some, e.g. `sound_events = ["done"]`).
+Nothing plays for repeated/no-op transitions into the same state, and
+nothing plays if the tab is currently focused (you're already looking
+at it) unless `sound_play_when_focused = true`. Playback runs in a
+background thread and never blocks or fails the state update itself.
 
 The two built-in sounds are sourced from
 [herdrdev/herdr](https://github.com/herdrdev/herdr) (Apache License
@@ -208,9 +213,10 @@ daemon (long-running, tokio)
         resolves through a real hook instead (typically UserPromptSubmit
         once you reply), since its on-screen content varies too much
         for marker-matching to work reliably
-  → plays a sound (if sound_enabled and the tab isn't currently
-    focused) on entering permission/waiting or done, in a background
-    thread, via whichever system audio player happens to be installed
+  → plays a sound (if sound_enabled, the entered state is in
+    sound_events, and the tab isn't currently focused) on entering
+    permission/waiting or done, in a background thread, via whichever
+    system audio player happens to be installed
 ```
 
 A real OS advisory lock (`fd-lock`) gates daemon startup, so two
