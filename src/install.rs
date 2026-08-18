@@ -73,6 +73,18 @@ const HOOKS: &[HookSpec] = &[
         our_event: "session-end",
         our_matcher: None,
     },
+    HookSpec {
+        event_key: "PreCompact",
+        matcher: None,
+        our_event: "pre-compact",
+        our_matcher: None,
+    },
+    HookSpec {
+        event_key: "PostCompact",
+        matcher: None,
+        our_event: "post-compact",
+        our_matcher: None,
+    },
 ];
 
 fn settings_path() -> PathBuf {
@@ -295,6 +307,8 @@ mod tests {
         let added = merge_hooks(&mut root, EXE).unwrap();
         assert_eq!(added, HOOKS.len());
         assert_eq!(root["hooks"]["Notification"].as_array().unwrap().len(), 4);
+        assert_eq!(root["hooks"]["PreCompact"].as_array().unwrap().len(), 1);
+        assert_eq!(root["hooks"]["PostCompact"].as_array().unwrap().len(), 1);
     }
 
     #[test]

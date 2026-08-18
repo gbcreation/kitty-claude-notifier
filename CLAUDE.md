@@ -119,10 +119,10 @@ daemon (long-running, tokio)
         override skipped it)
       - if this is a genuine transition (the new state differs from the
         one already recorded for this session), retires any timers the
-        superseded state armed, then arms idle_timer (Done/Waiting)
-        and/or resume_watch (Permission only) for the new state. A
-        repeat of the same state leaves existing timers untouched
-        instead (see Known limitations)
+        superseded state armed, then arms idle_timer (Done/Waiting/
+        Compacting) and/or resume_watch (Permission only) for the new
+        state. A repeat of the same state leaves existing timers
+        untouched instead (see Known limitations)
       - if config.sound_enabled, the new state is listed in
         config.sound_events, this is a genuine transition, and (the tab
         isn't currently focused OR config.sound_play_when_focused),
@@ -154,6 +154,7 @@ without any wired hook trigger are intentionally omitted from this model.
 | `done` | `Stop` | `idle_timer`: exact `idle_timeout_secs` after entry |
 | `idle` | daemon-internal (`idle_timer` firing) | superseded by the next hook message |
 | `error` | `StopFailure` | superseded by the next hook message |
+| `compacting` | `PreCompact` | `PostCompact` (mapped to `working`), or `idle_timer` as a safety net if `PostCompact` never fires |
 
 `session-end` is not a state; it's a cleanup signal (`hook::event::resolve_state`
 returns `None` for it, handled as `MessageKind::Cleanup`: resets the tab,
@@ -167,6 +168,16 @@ noise, and (before `Error` had any exit condition) could leave a tab
 stuck on "error" long after Claude had already moved on. `StopFailure`
 (the whole turn ending in failure) is kept; nothing "tries something
 else" after that.
+
+`compacting` was added deliberately as its own state rather than reusing
+`working` (the simpler option that was considered and rejected): a
+compaction-specific icon/color lets you tell "just compacting" apart
+from "actively working your task" at a glance. `PostCompact` is
+registered specifically to exit this state (unlike other cases where a
+"whatever happens next fires its own hook anyway" argument was used to
+justify *not* registering an extra hook); without it, nothing would
+ever clear `compacting` except the `idle_timer` safety net, 300s
+(`idle_timeout_secs`) later by default.
 
 ## Known limitations
 
@@ -223,7 +234,7 @@ else" after that.
   Confirmed by a failed live test (a colored ANSI wrapper around an
   emoji rendered in the emoji's own default color, not the requested
   one) before switching the built-in defaults to plain characters
-  (`●`, `▲`, `◐`, `✓`, `○`, `✕`).
+  (`●`, `▲`, `◐`, `✓`, `○`, `✕`, `▣`).
 - Built-in default icon colors are white for every state except `Idle`.
   **Do not** default an icon's color to match its state's tab
   background color (`default_color()`); if they're equal, the icon is

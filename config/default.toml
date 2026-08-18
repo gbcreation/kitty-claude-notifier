@@ -6,7 +6,7 @@
 # headers below. TOML assigns any key after a [table] header to that
 # table, not to the document root.
 
-# Seconds before done/waiting -> idle.
+# Seconds before done/waiting/compacting -> idle.
 idle_timeout_secs = 300
 
 # How often the resume-detection screen-scrape polls `kitten @ get-text`
@@ -86,6 +86,10 @@ color = "#888888"
 glyph = "✕"
 color = "#ffffff"
 
+[icons.compacting]
+glyph = "▣"
+color = "#ffffff"
+
 # Per-state tab color overrides. A plain string applies to both the
 # focused and unfocused tab background ("NONE" clears it). To use a
 # different color when the tab isn't focused, use a table instead, e.g.:
@@ -103,3 +107,4 @@ waiting = "#00ffd5"
 done = "#00ffd5"
 idle = "NONE"
 error = "#ff6b00"
+compacting = "#3fa7d6"

@@ -28,6 +28,12 @@ pub fn resolve_state(event: &str, matcher: Option<&str>) -> Option<State> {
         },
         "stop" => Some(State::Done),
         "stop-failure" => Some(State::Error),
+        "pre-compact" => Some(State::Compacting),
+        // Whatever Claude Code does right after compacting (continue
+        // generating, ask something, finish the turn) fires its own
+        // correct hook shortly anyway; Working is just a safe interim
+        // default rather than leaving the tab on Compacting indefinitely.
+        "post-compact" => Some(State::Working),
         _ => None,
     }
 }
@@ -44,6 +50,8 @@ mod tests {
         );
         assert_eq!(resolve_state("stop", None), Some(State::Done));
         assert_eq!(resolve_state("stop-failure", None), Some(State::Error));
+        assert_eq!(resolve_state("pre-compact", None), Some(State::Compacting));
+        assert_eq!(resolve_state("post-compact", None), Some(State::Working));
     }
 
     #[test]
