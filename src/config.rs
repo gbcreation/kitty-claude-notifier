@@ -308,7 +308,7 @@ mod tests {
         let raw = include_str!("../config/default.toml");
         let cfg: Config = toml::from_str(raw).expect("config/default.toml must parse");
         assert!(!cfg.permission_markers.is_empty());
-        assert_eq!(cfg.colors.len(), 6);
-        assert_eq!(cfg.icons.len(), 6);
+        assert_eq!(cfg.colors.len(), 7);
+        assert_eq!(cfg.icons.len(), 7);
     }
 }

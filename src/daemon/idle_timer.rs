@@ -10,10 +10,11 @@ use crate::state::State;
 
 use super::session::SessionTable;
 
-/// Spawns a cancellable timer that fires `Done`/`Waiting` -> `Idle` at the
-/// exact configured duration, no polling, unlike the bash daemon's fixed
-/// 10s tick. Caller is responsible for aborting the previous timer (if any)
-/// before calling this again for the same session.
+/// Spawns a cancellable timer that fires `Done`/`Waiting`/`Compacting` ->
+/// `Idle` at the exact configured duration, no polling, unlike the bash
+/// daemon's fixed 10s tick. Caller is responsible for aborting the
+/// previous timer (if any) before calling this again for the same
+/// session.
 pub fn spawn(
     session_id: String,
     target: WindowTarget,
@@ -26,9 +27,11 @@ pub fn spawn(
         tokio::time::sleep(duration).await;
         let mut table = sessions.lock().await;
         if let Some(session) = table.get_mut(&session_id) {
-            // A session in Waiting has both timers armed; idle_timer
-            // winning the race means resume_watch's answer no longer
-            // applies.
+            // No state currently arms both idle_timer and resume_watch at
+            // once (only Permission arms resume_watch, and it never arms
+            // idle_timer), but clear it defensively in case that ever
+            // changes; a resume_watch task left dangling here would keep
+            // polling for a session idle_timer just retired.
             if let Some(handle) = session.resume_watch.take() {
                 handle.abort();
             }

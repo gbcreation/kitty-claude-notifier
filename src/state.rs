@@ -14,6 +14,7 @@ pub enum State {
     Done,
     Idle,
     Error,
+    Compacting,
 }
 
 impl State {
@@ -27,6 +28,7 @@ impl State {
             State::Done => "✓",
             State::Idle => "○",
             State::Error => "✕",
+            State::Compacting => "▣",
         }
     }
 
@@ -41,6 +43,7 @@ impl State {
             State::Done => "#ffffff",
             State::Idle => "#888888",
             State::Error => "#ffffff",
+            State::Compacting => "#ffffff",
         }
     }
 
@@ -54,6 +57,7 @@ impl State {
             State::Done => "#00ffd5",
             State::Idle => "NONE",
             State::Error => "#ff6b00",
+            State::Compacting => "#3fa7d6",
         }
     }
 }
@@ -69,6 +73,7 @@ impl FromStr for State {
             "done" => Ok(State::Done),
             "idle" => Ok(State::Idle),
             "error" => Ok(State::Error),
+            "compacting" => Ok(State::Compacting),
             other => Err(format!("unknown state: {other}")),
         }
     }
@@ -83,6 +88,7 @@ impl fmt::Display for State {
             State::Done => "done",
             State::Idle => "idle",
             State::Error => "error",
+            State::Compacting => "compacting",
         };
         write!(f, "{s}")
     }

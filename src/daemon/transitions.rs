@@ -83,16 +83,17 @@ pub async fn apply(
                     abort_timers(&old);
                 }
 
-                let idle_timer = matches!(state, State::Done | State::Waiting).then(|| {
-                    idle_timer::spawn(
-                        session_id.clone(),
-                        msg.target.clone(),
-                        Duration::from_secs(config.idle_timeout_secs),
-                        sessions.clone(),
-                        client.clone(),
-                        config.clone(),
-                    )
-                });
+                let idle_timer = matches!(state, State::Done | State::Waiting | State::Compacting)
+                    .then(|| {
+                        idle_timer::spawn(
+                            session_id.clone(),
+                            msg.target.clone(),
+                            Duration::from_secs(config.idle_timeout_secs),
+                            sessions.clone(),
+                            client.clone(),
+                            config.clone(),
+                        )
+                    });
                 // Permission dialogs are answered via a menu selection
                 // (arrow keys + enter), which fires no hook at all, so
                 // screen-scraping is the only way to detect resolution.
@@ -161,7 +162,7 @@ fn sound_for_transition(
     match new_state {
         State::Permission | State::Waiting => Some(Sound::Request),
         State::Done => Some(Sound::Done),
-        State::Working | State::Idle | State::Error => None,
+        State::Working | State::Idle | State::Error | State::Compacting => None,
     }
 }
 
@@ -315,6 +316,27 @@ mod tests {
         let client = as_trait_object(&fake);
         apply(
             set_state_msg("s1", State::Waiting),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert!(session.resume_watch.is_none());
+        assert!(session.idle_timer.is_some());
+    }
+
+    #[tokio::test]
+    async fn compacting_arms_idle_timer_but_not_resume_watch() {
+        // idle_timer here is a safety net in case PostCompact never fires
+        // (e.g. the process was interrupted mid-compaction); resume_watch
+        // makes no sense since there's no screen text to watch for.
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Compacting),
             &sessions,
             &client,
             &config,

@@ -29,8 +29,9 @@ to check.
 
 - **Live tab state**: a small colored icon prepended onto each tab's
   existing title shows whether that session is working, needs a
-  permission decision, is waiting on you, just finished, or hit an
-  error, without ever clobbering your shell's own title.
+  permission decision, is waiting on you, compacting its context, just
+  finished, or hit an error, without ever clobbering your shell's own
+  title.
 - **Reactive permission detection**: Claude Code has no hook event for
   "a permission prompt was just resolved," so most tools get stuck
   showing "needs permission" long after you've already answered it. This
@@ -90,7 +91,7 @@ on the very next hook event, since the daemon reloads the file fresh
 for every message and needs no restart:
 
 ```toml
-idle_timeout_secs = 300          # done/waiting -> idle
+idle_timeout_secs = 300          # done/waiting/compacting -> idle
 resume_poll_interval_ms = 500    # get-text poll rate while blocked
 
 permission_markers = [           # screen-text markers meaning "still blocked"
@@ -205,7 +206,8 @@ daemon (long-running, tokio)
         and prepends the new one, never replacing the rest of the title
       - sets the tab background color
   → per-session cancellable timers:
-      - idle_timer: exact-timing done/waiting -> idle
+      - idle_timer: exact-timing done/waiting/compacting -> idle (a
+        safety net for compacting, in case PostCompact never fires)
       - resume_watch: polls get-text while permission (a menu-selection
         dialog Claude Code fires no hook for on resolution), flips to
         working once the configured markers disappear for two
