@@ -43,4 +43,16 @@ mod tests {
         let markers = vec!["do you want to proceed?".to_string()];
         assert!(!any_present(&text, &markers));
     }
+
+    /// Regression: the shipped default marker used to be the literal
+    /// "❯ 1. yes", which missed permission prompts whose suggested first
+    /// option isn't worded "yes" (e.g. a custom or context-specific
+    /// suggestion). The numbered-menu prefix alone is the stable,
+    /// structural part.
+    #[test]
+    fn numbered_menu_prefix_matches_regardless_of_the_suggested_option_text() {
+        let text = "Do you want to proceed?\n❯ 1. Always allow this command\n  2. No";
+        let markers = vec!["❯ 1. ".to_string()];
+        assert!(any_present(text, &markers));
+    }
 }

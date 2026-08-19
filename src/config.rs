@@ -152,7 +152,11 @@ impl Config {
 fn default_permission_markers() -> Vec<String> {
     vec![
         "do you want to proceed?".to_string(),
-        "❯ 1. yes".to_string(),
+        // The numbered-menu prefix, not "❯ 1. yes": the suggested first
+        // option's wording varies (not always literally "yes"), but the
+        // "❯ 1. " prefix marking the pre-selected choice is structural
+        // and stable across permission-prompt variants.
+        "❯ 1. ".to_string(),
     ]
 }
 
