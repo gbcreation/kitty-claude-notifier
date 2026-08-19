@@ -96,8 +96,8 @@ resume_poll_interval_ms = 500    # get-text poll rate while blocked
 
 permission_markers = [           # screen-text markers meaning "still blocked"
     "do you want to proceed?",
-    "❯ 1. yes",
-]
+    "❯ 1. ",                    # numbered-menu prefix, not "❯ 1. yes":
+]                                # the suggested option's wording varies
 
 [icons.permission]                # per-state icon: glyph + color,
 glyph = "▲"                       # prepended onto the tab's existing title
