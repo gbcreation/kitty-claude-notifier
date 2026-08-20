@@ -178,3 +178,49 @@ fn daemon_reloads_config_without_restarting() {
     let second_log = fs::read_to_string(&mock_log).unwrap();
     assert!(second_log.contains("38;2;34;34;34"));
 }
+
+/// Regression test: if Kitty itself restarts (crash, manual restart)
+/// while the daemon is running, KITTY_LISTEN_ON's PID-suffixed socket
+/// path is gone for good and every Kitty IPC call started failing
+/// silently forever, with nothing to recover. The daemon must instead
+/// notice its socket is unreachable and exit itself, so the next hook
+/// event spawns a fresh daemon with the current environment.
+#[test]
+fn daemon_exits_when_kitty_socket_is_unreachable() {
+    let home = tempfile::tempdir().unwrap();
+    let socket_path = home
+        .path()
+        .join(".config/kitty-claude-notifier/daemon.sock");
+    let bogus_listen_on = home.path().join("definitely-not-a-real-kitty-socket");
+
+    let daemon = std::cell::RefCell::new(
+        Command::new(env!("CARGO_BIN_EXE_kitty-claude-notifier"))
+            .arg("daemon")
+            .env("HOME", home.path())
+            .env(
+                "KITTY_LISTEN_ON",
+                format!("unix:{}", bogus_listen_on.display()),
+            )
+            .spawn()
+            .expect("failed to spawn daemon binary"),
+    );
+
+    assert!(
+        wait_for(Duration::from_secs(3), || socket_path.exists()),
+        "daemon never bound its socket"
+    );
+
+    let msg = r#"{"session_id":"itest-exit","target":{"Id":"1"},"kind":{"SetState":"working"}}"#;
+    send_message(&socket_path, msg);
+
+    assert!(
+        wait_for(Duration::from_secs(2), || {
+            matches!(daemon.borrow_mut().try_wait(), Ok(Some(_)))
+        }),
+        "daemon should have exited once its Kitty socket was found unreachable"
+    );
+
+    let mut daemon = daemon.into_inner();
+    let _ = daemon.kill();
+    let _ = daemon.wait();
+}

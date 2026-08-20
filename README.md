@@ -219,6 +219,10 @@ daemon (long-running, tokio)
     sound_events, and the tab isn't currently focused) on entering
     permission/waiting or done, in a background thread, via whichever
     system audio player happens to be installed
+  → exits itself if Kitty has restarted since it was spawned (its
+    listen socket has gone unreachable), so the next hook event spawns
+    a fresh daemon with the current environment instead of failing
+    every Kitty IPC call silently forever
 ```
 
 A real OS advisory lock (`fd-lock`) gates daemon startup, so two

@@ -43,6 +43,39 @@ impl Default for ProcessKittyClient {
     }
 }
 
+/// Extracts the filesystem path portion of a `KITTY_LISTEN_ON`-style
+/// value (`unix:/tmp/kitty-1234` -> `/tmp/kitty-1234`). Pure, so it's
+/// directly testable without touching the filesystem.
+fn socket_path(listen_on: &str) -> &str {
+    listen_on.strip_prefix("unix:").unwrap_or(listen_on)
+}
+
+/// Whether the `KITTY_LISTEN_ON` socket this process was started with is
+/// still reachable. Its path is suffixed with Kitty's own PID
+/// (`unix:/tmp/kitty-{pid}`), so once Kitty itself restarts (crash,
+/// manual restart), the old path is gone for good and will never come
+/// back under that PID; every `kitten @` call against it would otherwise
+/// fail silently forever. Attempts a real connection rather than just
+/// checking the file exists: a hard crash (SIGKILL, segfault) can leave a
+/// stale socket file on disk with nothing listening on it, which would
+/// still report "exists" but fail to connect. Returns `true` if
+/// `KITTY_LISTEN_ON` isn't set at all, since there's nothing to check in
+/// that case.
+pub fn kitty_socket_reachable() -> bool {
+    match env::var("KITTY_LISTEN_ON") {
+        Ok(listen_on) if !listen_on.is_empty() => {
+            kitty_socket_reachable_at(socket_path(&listen_on))
+        }
+        _ => true,
+    }
+}
+
+/// The actual connection attempt, factored out so it's testable without
+/// touching the real `KITTY_LISTEN_ON` environment variable.
+fn kitty_socket_reachable_at(path: &str) -> bool {
+    std::os::unix::net::UnixStream::connect(path).is_ok()
+}
+
 impl KittyClient for ProcessKittyClient {
     fn set_tab_title(&self, target: &WindowTarget, title: &str) -> Result<()> {
         self.run(&["set-tab-title", "--match", &target.match_expr(), title])?;
@@ -98,5 +131,38 @@ impl KittyClient for ProcessKittyClient {
     fn get_text(&self, target: &WindowTarget) -> Result<String> {
         let output = self.run(&["get-text", "--match", &target.match_expr()])?;
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_the_unix_prefix() {
+        assert_eq!(socket_path("unix:/tmp/kitty-1234"), "/tmp/kitty-1234");
+    }
+
+    #[test]
+    fn leaves_a_bare_path_unchanged() {
+        assert_eq!(socket_path("/tmp/kitty-1234"), "/tmp/kitty-1234");
+    }
+
+    #[test]
+    fn reachable_when_nothing_is_listening_there() {
+        assert!(!kitty_socket_reachable_at(
+            "/tmp/kitty-claude-notifier-test-definitely-does-not-exist"
+        ));
+    }
+
+    #[test]
+    fn reachable_when_a_real_listener_is_present() {
+        let dir =
+            std::env::temp_dir().join(format!("kitty-claude-notifier-test-{}", std::process::id()));
+        let _ = std::fs::remove_file(&dir);
+        let listener = std::os::unix::net::UnixListener::bind(&dir).unwrap();
+        assert!(kitty_socket_reachable_at(dir.to_str().unwrap()));
+        drop(listener);
+        let _ = std::fs::remove_file(&dir);
     }
 }
