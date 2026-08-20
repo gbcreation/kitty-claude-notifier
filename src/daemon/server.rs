@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::config::Config;
 use crate::ipc::protocol::HookMessage;
-use crate::kitty::KittyClient;
+use crate::kitty::{self, KittyClient};
 
 use super::session::SessionTable;
 use super::transitions;
@@ -50,6 +50,19 @@ async fn handle_connection(
                 if let Ok(msg) = serde_json::from_str::<HookMessage>(line.trim_end()) {
                     let config = Arc::new(load_config(&config_path));
                     transitions::apply(msg, &sessions, &client, &config).await;
+                    // If Kitty itself has restarted (crash, manual restart)
+                    // since this daemon was spawned, KITTY_LISTEN_ON's
+                    // PID-suffixed path is gone for good; every Kitty IPC
+                    // call would otherwise fail silently forever. Exiting
+                    // lets the next hook event spawn a fresh daemon that
+                    // inherits the current, correct environment instead.
+                    if !kitty::kitty_socket_reachable() {
+                        tracing::error!(
+                            "KITTY_LISTEN_ON socket is no longer reachable (Kitty likely \
+                             restarted); exiting so the next hook event spawns a fresh daemon"
+                        );
+                        std::process::exit(1);
+                    }
                 }
             }
         }

@@ -3,7 +3,7 @@ pub mod fake;
 mod process_client;
 mod target;
 
-pub use process_client::ProcessKittyClient;
+pub use process_client::{ProcessKittyClient, kitty_socket_reachable};
 pub use target::WindowTarget;
 
 use anyhow::Result;

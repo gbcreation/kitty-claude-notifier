@@ -139,6 +139,9 @@ daemon (long-running, tokio)
     polls without any configured permission_markers present
   → Cleanup (session-end): kitty::clear() strips the icon back off
     (restoring the tab's natural title) and clears the tab color
+  → after each message, checks kitty::kitty_socket_reachable(); if the
+    Kitty this daemon was spawned against has since restarted, exits so
+    the next hook event spawns a fresh daemon with the current environment
 ```
 
 ## State model (LOCKED)
@@ -407,6 +410,25 @@ ever clear `compacting` except the `idle_timer` safety net, 300s
   it (e.g. a transient invalid state mid-edit). Already-running
   `idle_timer`/`resume_watch` tasks keep the config snapshot they were
   spawned with; only a session's *next* message picks up an edit.
+- **Self-exits if its Kitty socket goes unreachable.** `KITTY_LISTEN_ON`
+  is read once, from whichever hook process happened to spawn the
+  daemon, and never re-read afterward. Its path is suffixed with Kitty's
+  own PID (`unix:/tmp/kitty-{pid}`), so if Kitty itself restarts (crash,
+  manual restart) while the daemon is running, the old path is gone for
+  good under that PID and every subsequent `kitten @` call would
+  otherwise fail silently forever (title/color/get-text all broken,
+  while sound notifications keep working fine, since they never touch
+  Kitty IPC at all — this split was the actual symptom that surfaced the
+  bug live). After processing each message, `server.rs` checks
+  `kitty::kitty_socket_reachable()` (a real connection attempt, not just
+  a file-existence check, since a hard crash can leave a stale socket
+  file on disk with nothing listening on it) and calls
+  `std::process::exit(1)` if it fails. This reuses the daemon's existing
+  no-persistence self-healing: the next hook event's
+  `connect_or_spawn_daemon` finds nothing listening and spawns a fresh
+  daemon that inherits the *current*, correct environment. See
+  `tests/daemon_lifecycle.rs`'s
+  `daemon_exits_when_kitty_socket_is_unreachable`.
 
 ## Constraints (do not do)
 
