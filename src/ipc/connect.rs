@@ -20,7 +20,9 @@ pub fn send(socket_path: &Path, msg: &HookMessage) -> Result<()> {
     Ok(())
 }
 
-fn connect_or_spawn_daemon(socket_path: &Path) -> Result<UnixStream> {
+/// Also used directly by `restart`, which needs the spawn-and-wait
+/// behavior without a message to send.
+pub fn connect_or_spawn_daemon(socket_path: &Path) -> Result<UnixStream> {
     if let Ok(stream) = UnixStream::connect(socket_path) {
         return Ok(stream);
     }

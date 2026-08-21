@@ -23,6 +23,10 @@ cargo build --release
 # preserves config.toml)
 ./target/release/kitty-claude-notifier uninstall
 
+# Restart (stops the currently running daemon, if any, and starts a
+# fresh one against the current environment/binary)
+./target/release/kitty-claude-notifier restart
+
 # Test suite (must be green before pushing)
 cargo test --all-targets
 
@@ -37,11 +41,12 @@ cargo fmt --check
 src/
 ├── main.rs                  # entry point: clap parse, dispatch
 ├── lib.rs                   # module declarations
-├── cli.rs                   # clap CLI: hook / daemon / install / uninstall / test
+├── cli.rs                   # clap CLI: hook / daemon / restart / install / uninstall / test
 ├── state.rs                 # State enum (locked model) + default icon glyph/color
 ├── config.rs                # config.toml load; IconSpec/ColorSpec + per-state overrides
 ├── icon.rs                   # builds/strips the colored icon prefix on a title
-├── paths.rs                 # ~/.config/kitty-claude-notifier/{config.toml,daemon.sock,daemon.log,bin/}
+├── restart.rs                # stops the running daemon (via daemon.pid) and starts a fresh one
+├── paths.rs                 # ~/.config/kitty-claude-notifier/{config.toml,daemon.sock,daemon.log,daemon.pid,bin/}
 ├── markers.rs                # permission-prompt text matching (tail-of-screen, case-insensitive)
 ├── sound.rs                  # opt-in sound playback on permission/waiting/done (background thread)
 ├── install.rs                # install/uninstall; pure merge_hooks/remove_hooks + file I/O wrapper
@@ -448,7 +453,10 @@ a tab reads "done" while Claude Code is, in fact, still working.
 
 - No network calls, no telemetry, no data collection.
 - Hook JSON is parsed in-memory only; the daemon keeps session state in
-  memory too. No state files are ever written to disk.
+  memory too. No *session* state is ever written to disk. `daemon.pid`
+  is the one on-disk exception, and it's pure process-lifecycle
+  bookkeeping (a bare pid number, for `restart` to find the running
+  daemon), never session/hook data.
 - **`kitten @ ls` (used by `get_tab_info`) returns each matched window's
   full environment variables and other process details alongside its
   title.** `ProcessKittyClient::get_tab_info` must only ever extract the
@@ -457,9 +465,9 @@ a tab reads "done" while Claude Code is, in fact, still working.
   including `daemon.log` and error messages. (This was not a hypothetical:
   manual testing during development incidentally printed a live API key
   from a window's environment into a terminal session.)
-- `daemon.lock`/`daemon.sock`/`daemon.log`/`config.toml` all live under
-  `~/.config/kitty-claude-notifier/`. Never write session or hook data
-  anywhere else.
+- `daemon.lock`/`daemon.sock`/`daemon.log`/`daemon.pid`/`config.toml`
+  all live under `~/.config/kitty-claude-notifier/`. Never write session
+  or hook data anywhere else.
 - Config parsing is via `serde`/`toml` (no `eval`, no shell interpolation
   of user-controlled config values).
 - Sound playback shells out to a fixed allowlist of player binaries with
@@ -474,9 +482,31 @@ a tab reads "done" while Claude Code is, in fact, still working.
   (`fd-lock`, held for the daemon's whole lifetime) rather than a
   PID-file/lock-age heuristic. A second daemon that loses the race logs
   it and exits; it never touches the socket file.
-- No persistence: every hook event carries full session context, so a
-  crashed daemon self-heals from the next hook fire. This is a
-  deliberate design choice, not a gap to fill in later.
+- No *session* persistence: every hook event carries full session
+  context, so a crashed daemon self-heals from the next hook fire. This
+  is a deliberate design choice, not a gap to fill in later.
+- **`restart` subcommand**: stops whatever daemon is currently running
+  and starts a fresh one, e.g. after rebuilding/reinstalling the binary
+  or when you don't want to wait for the next hook event to trigger the
+  self-heal paths below. Implemented in `restart.rs`: reads
+  `daemon.pid` (written fresh by `daemon/mod.rs` every time a daemon
+  wins the `fd-lock`, right after acquiring it, so a stale entry from a
+  crashed instance is never trusted — anything reading it must first
+  confirm via `kill(pid, 0)` that the pid is still alive), sends it
+  `SIGTERM`, polls for it to actually exit, then calls the same
+  `ipc::connect::connect_or_spawn_daemon` a hook invocation uses to
+  spawn a fresh one and confirm it's listening. No graceful-shutdown
+  handling was added to the daemon itself for this: `SIGTERM`'s default
+  disposition (immediate termination) is fine, since the daemon's whole
+  design already tolerates being killed at any moment (see "No session
+  persistence" above and the self-heal paths below).
+  **If `daemon.pid` is missing/stale but the socket is nonetheless
+  answering** (confirmed live: an already-running daemon from a build
+  that predates this file has no pid to read), `restart` refuses to
+  proceed rather than silently reconnecting to that old daemon via
+  `connect_or_spawn_daemon`'s own connect-first fast path and reporting
+  a false "restarted" success — it errors out with instructions to stop
+  it manually instead.
 - `resume_watch`'s poll interval is `config.resume_poll_interval_ms`
   (default 500ms), cheap (one `kitten @ get-text` IPC round-trip), but
   don't reduce it aggressively without considering the cost across many
