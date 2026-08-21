@@ -15,4 +15,15 @@ pub struct HookMessage {
 pub enum MessageKind {
     SetState(State),
     Cleanup,
+    /// A background subagent (Task tool) was spawned. `agent_id`
+    /// correlates with the matching `AgentStop` that ends it.
+    AgentStart {
+        agent_id: String,
+    },
+    /// A background subagent finished. A stop for an `agent_id` that
+    /// was never started (e.g. Claude Code's own internal
+    /// background-shell-command bookkeeping) is a no-op.
+    AgentStop {
+        agent_id: String,
+    },
 }

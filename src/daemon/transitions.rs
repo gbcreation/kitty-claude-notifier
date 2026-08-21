@@ -26,13 +26,16 @@ pub async fn apply(
 ) {
     match msg.kind {
         MessageKind::SetState(state) => {
-            let icon = config.icon_for(state);
-            let (active, inactive) = config.colors_for(state);
+            let mut table = sessions.lock().await;
+            let existing = msg.session_id.as_ref().and_then(|id| table.get(id));
+            let old_state = existing.map(|s| s.state);
+            let has_active_agents = existing.is_some_and(|s| !s.active_agents.is_empty());
+
+            let visual = state.visual(has_active_agents);
+            let icon = config.icon_for(visual);
+            let (active, inactive) = config.colors_for(visual);
             let is_focused = kitty::apply(client.as_ref(), &msg.target, &icon, &active, &inactive);
             if let Some(session_id) = msg.session_id {
-                let mut table = sessions.lock().await;
-                let old_state = table.get(&session_id).map(|s| s.state);
-
                 if let Some(sound) = sound_for_transition(
                     config.sound_enabled,
                     &config.sound_events,
@@ -91,10 +94,16 @@ pub async fn apply(
                 // A genuine transition, or a repeated Permission message
                 // (see above): any prior timers belong to a state this
                 // message supersedes, so abort them so neither can fire
-                // late.
-                if let Some(old) = table.remove(&session_id) {
-                    abort_timers(&old);
-                }
+                // late. active_agents carries over unchanged: a
+                // background subagent's lifetime is independent of the
+                // main session's state transitions.
+                let active_agents = match table.remove(&session_id) {
+                    Some(old) => {
+                        abort_timers(&old);
+                        old.active_agents
+                    }
+                    None => std::collections::HashSet::new(),
+                };
 
                 let idle_timer = matches!(state, State::Done | State::Waiting | State::Compacting)
                     .then(|| {
@@ -132,8 +141,46 @@ pub async fn apply(
                         state,
                         idle_timer,
                         resume_watch,
+                        active_agents,
                     },
                 );
+            }
+        }
+        MessageKind::AgentStart { agent_id } => {
+            let Some(session_id) = msg.session_id else {
+                return;
+            };
+            let mut table = sessions.lock().await;
+            let session = table.entry(session_id.clone()).or_insert_with(|| Session {
+                // A subagent can only be spawned mid-session, after
+                // UserPromptSubmit already fired, so Working is a safe
+                // assumption if this session is somehow not tracked yet;
+                // any real state is restored by the next SetState message
+                // regardless.
+                state: State::Working,
+                idle_timer: None,
+                resume_watch: None,
+                active_agents: std::collections::HashSet::new(),
+            });
+            session.active_agents.insert(agent_id);
+            let visual = session.state.visual(true);
+            let icon = config.icon_for(visual);
+            let (active, inactive) = config.colors_for(visual);
+            kitty::apply(client.as_ref(), &msg.target, &icon, &active, &inactive);
+            tracing::info!(%session_id, "background agent started");
+        }
+        MessageKind::AgentStop { agent_id } => {
+            let Some(session_id) = msg.session_id else {
+                return;
+            };
+            let mut table = sessions.lock().await;
+            if let Some(session) = table.get_mut(&session_id) {
+                session.active_agents.remove(&agent_id);
+                let visual = session.state.visual(!session.active_agents.is_empty());
+                let icon = config.icon_for(visual);
+                let (active, inactive) = config.colors_for(visual);
+                kitty::apply(client.as_ref(), &msg.target, &icon, &active, &inactive);
+                tracing::info!(%session_id, "background agent stopped");
             }
         }
         MessageKind::Cleanup => {
@@ -175,7 +222,11 @@ fn sound_for_transition(
     match new_state {
         State::Permission | State::Waiting => Some(Sound::Request),
         State::Done => Some(Sound::Done),
-        State::Working | State::Idle | State::Error | State::Compacting => None,
+        // AgentWorking is a paint-time overlay, never a real stored
+        // state (see State::visual); SetState never carries it.
+        State::Working | State::Idle | State::Error | State::Compacting | State::AgentWorking => {
+            None
+        }
     }
 }
 
@@ -297,6 +348,26 @@ mod tests {
             session_id: Some(session_id.to_string()),
             target: WindowTarget::Id("1".to_string()),
             kind: MessageKind::SetState(state),
+        }
+    }
+
+    fn agent_start_msg(session_id: &str, agent_id: &str) -> HookMessage {
+        HookMessage {
+            session_id: Some(session_id.to_string()),
+            target: WindowTarget::Id("1".to_string()),
+            kind: MessageKind::AgentStart {
+                agent_id: agent_id.to_string(),
+            },
+        }
+    }
+
+    fn agent_stop_msg(session_id: &str, agent_id: &str) -> HookMessage {
+        HookMessage {
+            session_id: Some(session_id.to_string()),
+            target: WindowTarget::Id("1".to_string()),
+            kind: MessageKind::AgentStop {
+                agent_id: agent_id.to_string(),
+            },
         }
     }
 
@@ -714,5 +785,105 @@ mod tests {
         .await;
 
         assert_eq!(count_get_tab_info_calls(&fake), 0);
+    }
+
+    #[tokio::test]
+    async fn agent_start_overlays_agent_working_on_top_of_done() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Done),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        apply(agent_start_msg("s1", "a1"), &sessions, &client, &config).await;
+
+        let icon = config.icon_for(State::AgentWorking);
+        assert_eq!(
+            fake.last_title(),
+            Some(crate::icon::build_title(&icon.glyph, &icon.color, ""))
+        );
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert_eq!(session.state, State::Done, "real state is left untouched");
+        assert!(session.active_agents.contains("a1"));
+    }
+
+    #[tokio::test]
+    async fn agent_stop_reverts_to_the_real_state_once_no_agents_remain() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Done),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+        apply(agent_start_msg("s1", "a1"), &sessions, &client, &config).await;
+        apply(agent_start_msg("s1", "a2"), &sessions, &client, &config).await;
+
+        apply(agent_stop_msg("s1", "a1"), &sessions, &client, &config).await;
+        // One agent still active: overlay stays.
+        let icon = config.icon_for(State::AgentWorking);
+        assert_eq!(
+            fake.last_title(),
+            Some(crate::icon::build_title(&icon.glyph, &icon.color, ""))
+        );
+
+        apply(agent_stop_msg("s1", "a2"), &sessions, &client, &config).await;
+        // No agents left: overlay clears, real state (Done) repaints.
+        let icon = config.icon_for(State::Done);
+        assert_eq!(
+            fake.last_title(),
+            Some(crate::icon::build_title(&icon.glyph, &icon.color, ""))
+        );
+        let table = sessions.lock().await;
+        assert!(table.get("s1").unwrap().active_agents.is_empty());
+    }
+
+    #[tokio::test]
+    async fn agent_stop_for_an_untracked_agent_id_is_a_harmless_no_op() {
+        // Claude Code's own internal background-shell-command bookkeeping
+        // fires SubagentStop with no matching SubagentStart; it must not
+        // panic or otherwise disturb session state.
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Working),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        apply(
+            agent_stop_msg("s1", "never-started"),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert_eq!(session.state, State::Working);
+        assert!(session.active_agents.is_empty());
+    }
+
+    #[tokio::test]
+    async fn agent_start_for_an_unknown_session_creates_one_defaulted_to_working() {
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+
+        apply(agent_start_msg("s1", "a1"), &sessions, &client, &config).await;
+
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert_eq!(session.state, State::Working);
+        assert!(session.active_agents.contains("a1"));
     }
 }

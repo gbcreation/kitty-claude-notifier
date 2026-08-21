@@ -29,10 +29,20 @@ pub fn run(event: &str, matcher: Option<&str>, read_stdin: bool, socket_path: &P
     let payload = HookPayload::parse(&raw);
     let target = WindowTarget::from_env();
 
-    let kind = match resolve_state(event, matcher) {
-        Some(state) => MessageKind::SetState(state),
-        None if event == "session-end" => MessageKind::Cleanup,
-        None => return Ok(()),
+    // SubagentStart/SubagentStop don't map to a State at all (they
+    // overlay whatever the real state is, see State::AgentWorking), so
+    // they're handled here directly rather than through resolve_state.
+    // Without an agent_id there's nothing to correlate a later
+    // AgentStop against, so there's nothing useful to send.
+    let kind = match (event, payload.agent_id.clone()) {
+        ("subagent-start", Some(agent_id)) => MessageKind::AgentStart { agent_id },
+        ("subagent-stop", Some(agent_id)) => MessageKind::AgentStop { agent_id },
+        ("subagent-start" | "subagent-stop", None) => return Ok(()),
+        _ => match resolve_state(event, matcher) {
+            Some(state) => MessageKind::SetState(state),
+            None if event == "session-end" => MessageKind::Cleanup,
+            None => return Ok(()),
+        },
     };
 
     let msg = HookMessage {

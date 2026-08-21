@@ -6,6 +6,8 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize, Default)]
 pub struct HookPayload {
     pub session_id: Option<String>,
+    /// Present only on `SubagentStart`/`SubagentStop` payloads.
+    pub agent_id: Option<String>,
 }
 
 impl HookPayload {
