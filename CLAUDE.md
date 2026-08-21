@@ -202,14 +202,29 @@ ever clear `compacting` except the `idle_timer` safety net, 300s
   `Waiting` without a fundamentally different (non-marker-based) way to
   detect resolution.
 - **A repeated `SetState` into the same state a session is already in
-  leaves its timers untouched**, rather than aborting and re-arming them.
-  This matters because Claude Code appears to re-fire `idle_prompt`
-  periodically while `Waiting` (observed roughly every 60 seconds in a
-  live session's `daemon.log`). If every repeat reset `idle_timer`'s
+  leaves its timers untouched**, rather than aborting and re-arming them,
+  *except for `Permission`*. This matters because Claude Code appears to
+  re-fire `idle_prompt`/`permission_prompt` periodically (observed
+  roughly every 20-100 seconds in a live session's `daemon.log`) while
+  you haven't responded yet. If every repeat reset `idle_timer`'s
   300-second countdown from zero, a session could stay stuck on
-  `waiting` forever, as long as the nudges kept arriving faster than the
-  timeout. See `transitions::apply`'s `old_state == Some(state)` early
-  return.
+  `waiting`/`done`/`compacting` forever, as long as the nudges kept
+  arriving faster than the timeout.
+  `Permission` is the deliberate exception: it relies entirely on
+  `resume_watch` staying alive, and that task can hit its own 600s
+  `MAX_WAIT` safety timeout and die silently while Claude Code keeps
+  sending repeated `permission_prompt` notifications for a prompt
+  that's still genuinely open, since nothing else was watching for the
+  screen text to clear. Confirmed live: a session sat stuck on
+  `permission` for 20+ minutes, well past `resume_watch`'s own timeout,
+  while `permission_prompt` kept re-firing every 20-100 seconds the
+  entire time, each one correctly logged as a no-op repeat and each one
+  a missed chance to notice resolution. A repeated `Permission` message
+  now always aborts the old `resume_watch` (dead or not) and starts a
+  fresh one, so it can never die while Claude Code keeps asking; the
+  cost is discarding whatever poll progress the old one had made, at
+  most a couple of poll intervals' delay. See `transitions::apply`'s
+  `old_state == Some(state) && state != State::Permission` guard.
 - **Split panes sharing one Kitty tab**: `set_tab_title`/`set_tab_color`
   operate on the whole tab, not an individual pane. If two Claude Code
   sessions run in two panes of the same tab (Kitty's split layout), they

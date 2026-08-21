@@ -64,7 +64,7 @@ pub async fn apply(
                     }
                 }
 
-                if old_state == Some(state) {
+                if old_state == Some(state) && state != State::Permission {
                     // A repeat of the state the session is already in
                     // (e.g. Claude Code re-firing idle_prompt as a
                     // periodic nudge while Waiting). Leave the existing
@@ -72,13 +72,26 @@ pub async fn apply(
                     // them here would let a fast-enough repeat cadence
                     // perpetually postpone idle_timer, keeping the tab
                     // stuck instead of ever reaching Idle.
+                    //
+                    // Permission is deliberately excluded from this: its
+                    // resolution relies entirely on resume_watch staying
+                    // alive, and that task can hit its own MAX_WAIT safety
+                    // timeout and die silently while Claude Code keeps
+                    // sending repeated permission_prompt notifications for
+                    // a prompt that's still genuinely open. Falling
+                    // through below to restart resume_watch on every
+                    // repeat means it can never die while Claude Code
+                    // keeps asking, at the cost of discarding whatever
+                    // poll progress the old one had made (at most a
+                    // couple of poll intervals' delay).
                     tracing::info!(%session_id, ?state, "session state repeated, timers untouched");
                     return;
                 }
 
-                // A genuine transition: any prior timers belong to a
-                // state this message supersedes, so abort them so neither
-                // can fire late.
+                // A genuine transition, or a repeated Permission message
+                // (see above): any prior timers belong to a state this
+                // message supersedes, so abort them so neither can fire
+                // late.
                 if let Some(old) = table.remove(&session_id) {
                     abort_timers(&old);
                 }
@@ -298,6 +311,59 @@ mod tests {
             &config,
         )
         .await;
+
+        let table = sessions.lock().await;
+        let session = table.get("s1").unwrap();
+        assert_eq!(session.state, State::Permission);
+        assert!(session.resume_watch.is_some());
+        assert!(session.idle_timer.is_none());
+    }
+
+    #[tokio::test]
+    async fn repeated_permission_message_restarts_resume_watch() {
+        // Regression: unlike other states, a repeated Permission message
+        // must restart resume_watch fresh rather than leaving it
+        // untouched. It's the only thing watching for resolution, and
+        // could otherwise die silently at its own MAX_WAIT safety
+        // timeout while Claude Code keeps sending repeated
+        // permission_prompt notifications for a prompt that's still
+        // genuinely open, leaving the tab stuck forever with nothing
+        // polling it.
+        let (sessions, fake, config) = harness();
+        let client = as_trait_object(&fake);
+        apply(
+            set_state_msg("s1", State::Permission),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        let original_resume = {
+            let table = sessions.lock().await;
+            table
+                .get("s1")
+                .unwrap()
+                .resume_watch
+                .as_ref()
+                .unwrap()
+                .abort_handle()
+        };
+        assert!(!original_resume.is_finished());
+
+        apply(
+            set_state_msg("s1", State::Permission),
+            &sessions,
+            &client,
+            &config,
+        )
+        .await;
+
+        tokio::task::yield_now().await;
+        assert!(
+            original_resume.is_finished(),
+            "repeated Permission message must abort the old resume_watch and start a fresh one"
+        );
 
         let table = sessions.lock().await;
         let session = table.get("s1").unwrap();
