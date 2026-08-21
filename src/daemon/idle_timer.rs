@@ -37,9 +37,10 @@ pub fn spawn(
             }
             session.state = State::Idle;
             session.idle_timer = None;
+            let visual = State::Idle.visual(!session.active_agents.is_empty());
             tracing::info!(%session_id, "idle timeout reached");
-            let icon = config.icon_for(State::Idle);
-            let (active, inactive) = config.colors_for(State::Idle);
+            let icon = config.icon_for(visual);
+            let (active, inactive) = config.colors_for(visual);
             kitty::apply(client.as_ref(), &target, &icon, &active, &inactive);
         }
     })

@@ -85,6 +85,18 @@ const HOOKS: &[HookSpec] = &[
         our_event: "post-compact",
         our_matcher: None,
     },
+    HookSpec {
+        event_key: "SubagentStart",
+        matcher: None,
+        our_event: "subagent-start",
+        our_matcher: None,
+    },
+    HookSpec {
+        event_key: "SubagentStop",
+        matcher: None,
+        our_event: "subagent-stop",
+        our_matcher: None,
+    },
 ];
 
 fn settings_path() -> PathBuf {
@@ -309,6 +321,8 @@ mod tests {
         assert_eq!(root["hooks"]["Notification"].as_array().unwrap().len(), 4);
         assert_eq!(root["hooks"]["PreCompact"].as_array().unwrap().len(), 1);
         assert_eq!(root["hooks"]["PostCompact"].as_array().unwrap().len(), 1);
+        assert_eq!(root["hooks"]["SubagentStart"].as_array().unwrap().len(), 1);
+        assert_eq!(root["hooks"]["SubagentStop"].as_array().unwrap().len(), 1);
     }
 
     #[test]

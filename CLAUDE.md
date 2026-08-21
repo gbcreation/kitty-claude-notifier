@@ -46,11 +46,12 @@ src/
 ├── sound.rs                  # opt-in sound playback on permission/waiting/done (background thread)
 ├── install.rs                # install/uninstall; pure merge_hooks/remove_hooks + file I/O wrapper
 ├── hook/
-│   ├── mod.rs                # hook subcommand: parse stdin, resolve target, send to daemon
+│   ├── mod.rs                # hook subcommand: parse stdin, resolve target, send to daemon;
+│   │                          # special-cases SubagentStart/Stop into AgentStart/AgentStop
 │   ├── payload.rs            # HookPayload: subset of Claude Code's hook JSON we use
 │   └── event.rs               # (event, Notification-matcher) -> State mapping
 ├── ipc/
-│   ├── protocol.rs            # HookMessage / MessageKind: the wire format
+│   ├── protocol.rs            # HookMessage / MessageKind: SetState/Cleanup/AgentStart/AgentStop
 │   └── connect.rs             # connect_or_spawn_daemon: fast-path connect, else spawn + retry
 ├── kitty/
 │   ├── mod.rs                 # KittyClient trait + TabInfo + apply()/clear() (title fetch/build/strip + color)
@@ -60,7 +61,8 @@ src/
 └── daemon/
     ├── mod.rs                  # daemon subcommand: logging init, flock, bind, serve
     ├── server.rs                # UnixListener accept loop; reloads config.toml fresh per message
-    ├── session.rs               # in-memory SessionTable (no persistence)
+    ├── session.rs               # in-memory SessionTable (no persistence); Session.active_agents
+    │                             # tracks running background subagents (see State::visual)
     ├── transitions.rs           # the state machine: applies hook messages
     ├── idle_timer.rs            # per-session cancellable Done/Waiting -> Idle timer
     └── resume_watch.rs          # per-session cancellable screen-scrape resume detector
@@ -139,6 +141,12 @@ daemon (long-running, tokio)
     polls without any configured permission_markers present
   → Cleanup (session-end): kitty::clear() strips the icon back off
     (restoring the tab's natural title) and clears the tab color
+  → AgentStart/AgentStop (SubagentStart/SubagentStop): mutate this
+    session's active_agents HashSet<String> by agent_id, then repaint via
+    state.visual(!active_agents.is_empty()) — see Background-agent
+    overlay below. Every other repaint site (SetState, idle_timer,
+    resume_watch) also goes through .visual() so the overlay is never
+    silently dropped by whichever of them repaints next
   → after each message, checks kitty::kitty_socket_reachable(); if the
     Kitty this daemon was spawned against has since restarted, exits so
     the next hook event spawns a fresh daemon with the current environment
@@ -181,6 +189,47 @@ registered specifically to exit this state (unlike other cases where a
 justify *not* registering an extra hook); without it, nothing would
 ever clear `compacting` except the `idle_timer` safety net, 300s
 (`idle_timeout_secs`) later by default.
+
+## Background-agent overlay
+
+`agent_working` is **not** a ninth entry in the locked state table above:
+it's never assigned to `Session.state` and never participates in a normal
+transition. It exists purely as an icon/color lookup key for `State::visual`,
+which is consulted at every point that repaints a tab
+(`transitions::apply`, `idle_timer`, `resume_watch`) and overlays
+`agent_working`'s icon/color on top of whatever the real state is, for as
+long as at least one background subagent (a Task-tool call) is running.
+
+This closes a real gap: `Stop` fires (moving the visible state to `done`)
+even while a subagent spawned earlier in the same turn is still running in
+the background — confirmed empirically, not assumed. Without the overlay,
+a tab reads "done" while Claude Code is, in fact, still working.
+
+- `Session.active_agents: HashSet<String>` tracks currently-running
+  subagents by `agent_id`, independently of `state`. `SubagentStart`/
+  `SubagentStop` map to `MessageKind::AgentStart`/`AgentStop`
+  (`hook::mod.rs` special-cases these two events before falling through
+  to `resolve_state`, since they don't map to a `State` at all).
+  `AgentStart` inserts the id (creating a session defaulted to `working`
+  if none is tracked yet — a subagent can only be spawned mid-session, so
+  this is always immediately corrected by the next real `SetState`
+  regardless); `AgentStop` removes it. Membership is by `agent_id`, so a
+  `SubagentStop` for an id never seen in a `SubagentStart` (Claude Code's
+  own internal, unnamed background-shell-command bookkeeping fires this
+  too, not just real subagents) is naturally a harmless no-op removal —
+  no explicit filtering needed.
+- `SubagentStart`/`SubagentStop`'s `session_id` field was empirically
+  confirmed to equal the *main* session's own id, not a separate subagent
+  session id — this is what makes tracking `active_agents` per main
+  `Session` correct.
+- The `background_tasks` array in `SubagentStop` payloads has a stale,
+  self-inclusive quirk (it lists the just-stopping agent as still
+  `"running"`), so it's never consulted; `active_agents` is this daemon's
+  own independent bookkeeping instead.
+- Icon: `"◑"` (half-filled circle, distinct from `waiting`'s `"◐"`).
+  Color: `#b026ff`, the same tab-background color as `working` — a
+  background agent running is still work happening, just not visible
+  through hooks.
 
 ## Known limitations
 

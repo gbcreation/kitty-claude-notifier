@@ -37,6 +37,11 @@ to check.
   showing "needs permission" long after you've already answered it. This
   one reads the tab's actual rendered screen content and flips back the
   moment the prompt disappears, typically within 500ms.
+- **Background-agent detection**: shows a distinct "still working" icon
+  while a background subagent (Task tool) is running, even though the
+  hook-visible state has already moved to "done" — Claude Code fires
+  `Stop` as soon as the main turn ends, regardless of whether a subagent
+  it kicked off is still running.
 - **Optional sound notifications**: an audible cue when a session needs
   your input or just finished, automatically suppressed for whichever
   tab you're currently looking at.
@@ -219,6 +224,12 @@ daemon (long-running, tokio)
     sound_events, and the tab isn't currently focused) on entering
     permission/waiting or done, in a background thread, via whichever
     system audio player happens to be installed
+  → tracks running background subagents (Task tool) per session, by
+    agent_id, independently of the session's own state; while at least
+    one is active, its icon/color overlays whatever the real state is
+    (e.g. still shown even once the visible state has already moved to
+    "done"), since Claude Code fires its `Stop` hook as soon as the main
+    turn ends regardless of a still-running subagent
   → exits itself if Kitty has restarted since it was spawned (its
     listen socket has gone unreachable), so the next hook event spawns
     a fresh daemon with the current environment instead of failing

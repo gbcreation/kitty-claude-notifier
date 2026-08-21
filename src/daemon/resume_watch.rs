@@ -61,7 +61,7 @@ pub fn spawn(
             }
 
             let mut table = sessions.lock().await;
-            if let Some(session) = table.get_mut(&session_id) {
+            let has_active_agents = if let Some(session) = table.get_mut(&session_id) {
                 // A session in Waiting has both timers armed; resume_watch
                 // winning the race means idle_timer's countdown no longer
                 // applies.
@@ -70,11 +70,15 @@ pub fn spawn(
                 }
                 session.state = State::Working;
                 session.resume_watch = None;
-            }
+                !session.active_agents.is_empty()
+            } else {
+                false
+            };
             drop(table);
             tracing::info!(%session_id, "resume detected: permission/waiting cleared");
-            let icon = config.icon_for(State::Working);
-            let (active, inactive) = config.colors_for(State::Working);
+            let visual = State::Working.visual(has_active_agents);
+            let icon = config.icon_for(visual);
+            let (active, inactive) = config.colors_for(visual);
             kitty::apply(client.as_ref(), &target, &icon, &active, &inactive);
             return;
         }
@@ -108,6 +112,7 @@ mod tests {
                 state,
                 idle_timer: None,
                 resume_watch: None,
+                active_agents: std::collections::HashSet::new(),
             },
         );
     }
@@ -210,6 +215,7 @@ mod tests {
                 state: State::Waiting,
                 idle_timer: Some(idle_handle),
                 resume_watch: None,
+                active_agents: std::collections::HashSet::new(),
             },
         );
 

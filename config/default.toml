@@ -95,6 +95,14 @@ color = "#ffffff"
 glyph = "▣"
 color = "#ffffff"
 
+# Overlay: painted instead of the real state's icon/color whenever a
+# background subagent (Task tool) is running, regardless of what the
+# main session's own state is (e.g. still shown even while the visible
+# state is "done"). See CLAUDE.md's background-agent overlay section.
+[icons.agent_working]
+glyph = "◑"
+color = "#ffffff"
+
 # Per-state tab color overrides. A plain string applies to both the
 # focused and unfocused tab background ("NONE" clears it). To use a
 # different color when the tab isn't focused, use a table instead, e.g.:
@@ -113,3 +121,6 @@ done = "#00ffd5"
 idle = "NONE"
 error = "#ff6b00"
 compacting = "#3fa7d6"
+# Same as `working`: an agent running in the background is still work
+# happening, just not visible through hooks (see [icons.agent_working]).
+agent_working = "#b026ff"
