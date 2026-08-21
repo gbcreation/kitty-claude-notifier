@@ -66,6 +66,12 @@ async fn async_run(socket_path: &Path, config_path: PathBuf) -> Result<()> {
         }
     };
 
+    // Written for `restart` to find this process later; a fresh write
+    // every time a daemon wins the lock, so an old pid from a prior
+    // (possibly crashed) instance is never mistaken for this one.
+    fs::write(paths::daemon_pid_path(), std::process::id().to_string())
+        .context("failed to write daemon.pid")?;
+
     // Holding the lock proves no other daemon can be concurrently binding,
     // so any leftover socket file here is genuinely stale.
     if let Some(parent) = socket_path.parent() {

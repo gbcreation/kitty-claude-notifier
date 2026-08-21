@@ -224,3 +224,90 @@ fn daemon_exits_when_kitty_socket_is_unreachable() {
     let _ = daemon.kill();
     let _ = daemon.wait();
 }
+
+/// Regression/feature test for the `restart` subcommand: it must stop
+/// whatever daemon is currently running (found via daemon.pid) and start
+/// a genuinely fresh one, not just leave the old one running untouched.
+#[test]
+fn restart_stops_the_old_daemon_and_starts_a_fresh_one() {
+    let home = tempfile::tempdir().unwrap();
+    let socket_path = home
+        .path()
+        .join(".config/kitty-claude-notifier/daemon.sock");
+    let pid_path = home.path().join(".config/kitty-claude-notifier/daemon.pid");
+    let log_path = home.path().join(".config/kitty-claude-notifier/daemon.log");
+
+    let daemon = spawn_daemon(home.path());
+    assert!(
+        wait_for(Duration::from_secs(3), || socket_path.exists()),
+        "daemon never bound its socket"
+    );
+    assert!(
+        wait_for(Duration::from_secs(3), || pid_path.exists()),
+        "daemon never wrote its pid file"
+    );
+    let old_pid: i32 = fs::read_to_string(&pid_path)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // This test process is the old daemon's direct parent (unlike
+    // production, where its actual spawner — a short-lived `hook`
+    // invocation — has long since exited and orphaned it to init).
+    // Without reaping it concurrently here, a terminated-but-unreaped
+    // daemon would linger as a zombie that `kill(pid, 0)` still sees as
+    // alive, and the assertion below would wrongly fail.
+    let reaper = std::thread::spawn(move || {
+        let mut daemon = daemon;
+        let _ = daemon.child.wait();
+    });
+
+    let status = Command::new(env!("CARGO_BIN_EXE_kitty-claude-notifier"))
+        .arg("restart")
+        .env("HOME", home.path())
+        .env_remove("KITTY_LISTEN_ON")
+        .status()
+        .expect("failed to run the restart subcommand");
+    assert!(status.success(), "restart subcommand exited with failure");
+    reaper.join().unwrap();
+
+    assert!(
+        nix::sys::signal::kill(nix::unistd::Pid::from_raw(old_pid), None).is_err(),
+        "old daemon process should have been terminated"
+    );
+
+    assert!(
+        wait_for(Duration::from_secs(3), || {
+            fs::read_to_string(&pid_path)
+                .ok()
+                .and_then(|s| s.trim().parse::<i32>().ok())
+                .is_some_and(|pid| pid != old_pid)
+        }),
+        "a fresh daemon never wrote a new pid"
+    );
+    let new_pid: i32 = fs::read_to_string(&pid_path)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let msg = r#"{"session_id":"itest-restart","target":{"Id":"1"},"kind":{"SetState":"working"}}"#;
+    send_message(&socket_path, msg);
+    assert!(
+        wait_for(Duration::from_secs(2), || {
+            fs::read_to_string(&log_path)
+                .map(|l| l.contains("itest-restart"))
+                .unwrap_or(false)
+        }),
+        "fresh daemon never processed a message"
+    );
+
+    // The fresh daemon is an orphaned process by now (its parent, the
+    // `restart` subprocess, already exited), not owned by any Child
+    // handle in this test, so it must be cleaned up directly.
+    let _ = nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(new_pid),
+        nix::sys::signal::Signal::SIGKILL,
+    );
+}

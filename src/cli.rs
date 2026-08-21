@@ -26,6 +26,8 @@ pub enum Commands {
     },
     /// Long-running background process that owns all Kitty IPC and session state.
     Daemon,
+    /// Stop the currently running daemon (if any) and start a fresh one.
+    Restart,
     /// Register this tool's hooks into ~/.claude/settings.json.
     Install,
     /// Remove this tool's hooks from ~/.claude/settings.json.

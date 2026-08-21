@@ -87,6 +87,21 @@ your `config.toml` is left in place):
 kitty-claude-notifier uninstall
 ```
 
+After rebuilding/reinstalling a new binary, or any time you just want a
+clean slate, restart the daemon (stops whatever instance is currently
+running, if any, and starts a fresh one against the current
+environment):
+
+```bash
+kitty-claude-notifier restart
+```
+
+You don't normally need this — the daemon already self-heals on its own
+(see [How it works](#how-it-works)) — but it's a quicker way to force
+that than waiting for the next hook event to trigger it, and it's the
+only way to pick up a just-rebuilt binary (the daemon otherwise keeps
+running the version it was originally spawned with).
+
 ## Configuration
 
 `~/.config/kitty-claude-notifier/config.toml` (see
@@ -201,8 +216,9 @@ Claude Code hook fires
       spawning it (detached) first if nothing answers
 
 daemon (long-running, tokio)
-  → holds per-session state in memory (no state files, since every hook
-    event carries full context, so a crash self-heals from the next one)
+  → holds per-session state in memory (no session state files, since
+    every hook event carries full context, so a crash self-heals from
+    the next one)
   → reloads config.toml fresh from disk for every message (no restart
     needed to pick up an edit)
   → owns all Kitty IPC centrally:
@@ -234,6 +250,9 @@ daemon (long-running, tokio)
     listen socket has gone unreachable), so the next hook event spawns
     a fresh daemon with the current environment instead of failing
     every Kitty IPC call silently forever
+  → records its own pid in daemon.pid on startup, so `restart` can find
+    and stop it directly rather than waiting on one of the self-heal
+    paths above
 ```
 
 A real OS advisory lock (`fd-lock`) gates daemon startup, so two

@@ -31,3 +31,12 @@ pub fn daemon_lock_path() -> PathBuf {
 pub fn daemon_log_path() -> PathBuf {
     config_dir().join("daemon.log")
 }
+
+/// Records the running daemon's own pid, written fresh every time it wins
+/// `daemon_lock_path`'s lock. Lets `restart` find and signal it without
+/// having to `pgrep` the process table; a stale entry from a crashed
+/// daemon is harmless, since anything reading it must first confirm the
+/// pid is still alive before trusting it.
+pub fn daemon_pid_path() -> PathBuf {
+    config_dir().join("daemon.pid")
+}

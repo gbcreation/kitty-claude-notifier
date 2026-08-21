@@ -27,6 +27,12 @@ fn main() -> anyhow::Result<()> {
         Commands::Daemon => {
             kitty_claude_notifier::daemon::run(&paths::daemon_socket_path(), paths::config_path())?;
         }
+        Commands::Restart => {
+            kitty_claude_notifier::restart::run(
+                &paths::daemon_socket_path(),
+                &paths::daemon_pid_path(),
+            )?;
+        }
         Commands::Install => kitty_claude_notifier::install::install()?,
         Commands::Uninstall => kitty_claude_notifier::install::uninstall()?,
         Commands::Test => {

@@ -8,5 +8,6 @@ pub mod ipc;
 pub mod kitty;
 pub mod markers;
 pub mod paths;
+pub mod restart;
 pub mod sound;
 pub mod state;
