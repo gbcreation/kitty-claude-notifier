@@ -34,8 +34,15 @@ fn process_kitty_client_invokes_mock_kitten_correctly() {
     let text = client.get_text(&target).unwrap();
 
     let log = fs::read_to_string(&log_path).unwrap();
-    assert!(log.contains("set-tab-title --match id:42 ⛔ Perm"));
-    assert!(log.contains("set-tab-color --match id:42 active_bg=#ff003c inactive_bg=#7a0020"));
+    // set-tab-title/set-tab-color are tab-scoped commands: "id:" there
+    // would ambiguously match a tab's own id first (see
+    // WindowTarget::tab_match_expr's doc comment for the live bug this
+    // caused), so they must use "window_id:" instead. get-text is
+    // window-scoped, where "id:" unambiguously means window id.
+    assert!(log.contains("set-tab-title --match window_id:42 ⛔ Perm"));
+    assert!(
+        log.contains("set-tab-color --match window_id:42 active_bg=#ff003c inactive_bg=#7a0020")
+    );
     assert!(log.contains("get-text --match id:42"));
     assert!(text.contains("Do you want to proceed?"));
 

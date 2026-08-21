@@ -235,6 +235,23 @@ ever clear `compacting` except the `idle_timer` safety net, 300s
 
 ## Icon prepending
 
+- **`set-tab-title`/`set-tab-color` must be matched via `window_id:`,
+  never bare `id:`.** These are tab-scoped Kitty remote-control
+  commands, and per `kitten @ set-tab-color --help`, their `--match
+  id:N` matches a *tab's own* numeric id first, only falling back to
+  "the tab containing a window with that id" if no tab has that id.
+  Tab ids and window ids are drawn from the same counter and can
+  therefore collide. Confirmed live: a session's `KITTY_WINDOW_ID`
+  numerically collided with an unrelated tab's own id, so every icon/
+  color update for that session silently painted the wrong (unrelated)
+  tab instead — the daemon logged no error at all, since the command
+  still succeeded, just against the wrong target. `window_id:N` matches
+  unambiguously ("the tab containing the window with this id"), with no
+  such fallback ordering. `kitten @ ls`/`get-text` are *window*-scoped
+  commands where `id:` already means window id unambiguously, so they
+  keep using `WindowTarget::match_expr()`; only the two tab-scoped
+  commands use the separate `WindowTarget::tab_match_expr()`. See
+  `tests/kitty_ipc.rs`'s `process_kitty_client_invokes_mock_kitten_correctly`.
 - Each state has a glyph + color (`config.icon_for(state)` → `Icon`),
   prepended onto the tab's title rather than replacing it. Verified
   live that Kitty's tab bar renders raw ANSI truecolor SGR escapes
@@ -478,6 +495,9 @@ ever clear `compacting` except the `idle_timer` safety net, 300s
   state: `sound_for_transition` must keep comparing against `old_state`.
 - Do not play a sound for a currently-focused tab: the focus check in
   `transitions::apply()`'s sound branch must stay wired.
+- Do not use `WindowTarget::match_expr()` (bare `id:`) for `set-tab-title`/
+  `set-tab-color`; use `tab_match_expr()` (`window_id:`). See the Icon
+  prepending section above — this caused a real, silent wrong-tab bug.
 
 ## Adding new hook events
 
