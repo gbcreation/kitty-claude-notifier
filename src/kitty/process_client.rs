@@ -78,7 +78,7 @@ fn kitty_socket_reachable_at(path: &str) -> bool {
 
 impl KittyClient for ProcessKittyClient {
     fn set_tab_title(&self, target: &WindowTarget, title: &str) -> Result<()> {
-        self.run(&["set-tab-title", "--match", &target.match_expr(), title])?;
+        self.run(&["set-tab-title", "--match", &target.tab_match_expr(), title])?;
         Ok(())
     }
 
@@ -93,7 +93,7 @@ impl KittyClient for ProcessKittyClient {
         self.run(&[
             "set-tab-color",
             "--match",
-            &target.match_expr(),
+            &target.tab_match_expr(),
             &active_spec,
             &inactive_spec,
         ])?;
